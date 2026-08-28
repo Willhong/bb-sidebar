@@ -159,7 +159,7 @@ export function SlimRow({
               "pointer-events-none relative tabular-nums text-2xs text-muted-foreground/60",
             )}
           >
-            <span className="flex items-center transition-opacity duration-150 ease-out group-hover/slim:opacity-0 motion-reduce:transition-none">
+            <span className="flex items-center transition-opacity duration-150 ease-out group-hover/slim:opacity-0 [@media(hover:none)]:opacity-0 motion-reduce:transition-none">
               {shelf === "snoozed" && wakeAt !== null ? (
                 snoozeWakeLabel(wakeAt, now)
               ) : (
@@ -185,7 +185,7 @@ export function SlimRow({
                 }}
                 // Pulled right by its own padding, so the icon — not the hit
                 // area — lands on the column.
-                className="pointer-events-auto absolute -right-0.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity duration-150 ease-out hover:text-foreground focus-visible:opacity-100 group-hover/slim:opacity-100 motion-reduce:transition-none"
+                className="pointer-events-auto absolute -right-0.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity duration-150 ease-out hover:text-foreground focus-visible:opacity-100 group-hover/slim:opacity-100 [@media(hover:none)]:opacity-100 motion-reduce:transition-none"
               >
                 <Icon
                   name={shelf === "snoozed" ? "Clock" : "ArrowTurnBackward"}
