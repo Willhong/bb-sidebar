@@ -2643,6 +2643,12 @@ describe("parking threads", () => {
     expect(controls).not.toBeNull();
     expect(controls!.classList.contains("opacity-0")).toBe(true);
     expect(controls!.classList.contains("pointer-events-none")).toBe(true);
+    expect(
+      controls!.classList.contains("[@media(hover:none)]:opacity-100"),
+    ).toBe(true);
+    expect(
+      controls!.classList.contains("[@media(hover:none)]:pointer-events-auto"),
+    ).toBe(true);
 
     fireEvent.keyDown(snooze, { key: "Enter" });
     await screen.findByRole("option", { name: "30 minutes" });
