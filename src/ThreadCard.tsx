@@ -113,6 +113,33 @@ export function ThreadCard({
         ? "read-idle"
         : "active";
 
+  const showParkActions = !isWoke && canPark && snoozePresets.length > 0;
+  const unpinButton = thread.isPinned ? (
+    <Tooltip label="Unpin thread">
+      <button
+        type="button"
+        aria-label={`Unpin ${threadDisplayTitle(thread)}`}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void actions.setPinned(thread.id, false).catch((error) => {
+            toast.error("Could not unpin thread", {
+              description:
+                error instanceof Error ? error.message : undefined,
+            });
+          });
+        }}
+        className={cn(
+          "shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground",
+          !showParkActions &&
+            "pointer-events-auto opacity-0 transition-opacity duration-150 ease-out focus-visible:opacity-100 group-hover/card:opacity-100 motion-reduce:transition-none",
+        )}
+      >
+        <Icon name="PinOff" className="size-3.5" />
+      </button>
+    </Tooltip>
+  ) : null;
+
   return (
     <RowContextMenu
       thread={thread}
@@ -187,70 +214,51 @@ export function ThreadCard({
               ) : null}
               <span className="min-w-0 truncate">{projectName ?? " "}</span>
             </span>
-            {thread.isPinned ? (
-              <Tooltip label="Unpin thread">
-                <button
-                  type="button"
-                  aria-label={`Unpin ${threadDisplayTitle(thread)}`}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void actions.setPinned(thread.id, false).catch((error) => {
-                      toast.error("Could not unpin thread", {
-                        description:
-                          error instanceof Error ? error.message : undefined,
-                      });
-                    });
-                  }}
-                  className="pointer-events-auto rounded p-0.5 text-muted-foreground opacity-0 transition-opacity duration-150 ease-out hover:text-foreground focus-visible:opacity-100 group-hover/card:opacity-100 motion-reduce:transition-none"
-                >
-                  <Icon name="PinOff" className="size-3.5" />
-                </button>
-              </Tooltip>
-            ) : null}
             {isWoke ? (
-              <Tooltip label="Dismiss Woke marker">
-                <button
-                  type="button"
-                  aria-label="Dismiss Woke marker"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onAcknowledgeWake();
-                  }}
-                  className={cn(
-                    STATUS_SLOT_CLASS,
-                    "pointer-events-auto justify-end text-2xs font-medium text-amber-700 hover:underline dark:text-amber-300",
-                  )}
-                >
-                  Woke
-                </button>
-              </Tooltip>
+              <span className={cn(STATUS_SLOT_CLASS, "w-auto min-w-20 gap-0.5")}>
+                {unpinButton}
+                <Tooltip label="Dismiss Woke marker">
+                  <button
+                    type="button"
+                    aria-label="Dismiss Woke marker"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onAcknowledgeWake();
+                    }}
+                    className="pointer-events-auto text-2xs font-medium text-amber-700 hover:underline dark:text-amber-300"
+                  >
+                    Woke
+                  </button>
+                </Tooltip>
+              </span>
             ) : (
               <span
                 className={cn(
                   STATUS_SLOT_CLASS,
                   "group/status-slot pointer-events-auto relative h-5",
+                  !showParkActions && "w-auto min-w-20",
                 )}
               >
                 <span
                   className={cn(
-                    "absolute inset-y-0 right-0 flex items-center justify-end transition-opacity duration-150 ease-out group-has-[:focus-visible]/status-slot:opacity-0 motion-reduce:transition-none",
-                    canPark &&
-                      snoozePresets.length > 0 &&
-                      "group-hover/card:opacity-0 [@media(hover:none)]:opacity-0",
+                    "flex items-center justify-end gap-0.5 transition-opacity duration-150 ease-out motion-reduce:transition-none",
+                    showParkActions &&
+                      "absolute inset-y-0 right-0 group-hover/card:opacity-0 [@media(hover:none)]:opacity-0 group-has-[:focus-visible]/status-slot:opacity-0",
                     isSnoozeOpen && "opacity-0",
                   )}
                 >
+                  {!showParkActions ? unpinButton : null}
                   <StatusOrTime thread={thread} now={now} />
                 </span>
-                {canPark && snoozePresets.length > 0 ? (
+                {showParkActions ? (
                   <span
                     className={cn(
                       "pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 ease-out has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 motion-reduce:transition-none",
                       isSnoozeOpen && "pointer-events-auto opacity-100",
                     )}
                   >
+                    {unpinButton}
                     <SnoozeSelect
                       label="Snooze thread"
                       snoozePresets={snoozePresets}
