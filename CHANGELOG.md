@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [0.2.12] - 2026-09-12
+
+### Fixed
+
+- Keep snooze, settle, and restore actions visible on touch devices, with parked thread labels and snooze countdowns beside the restore button.
+- Group the unpin button with card actions, or with the status and Woke label when parking actions are unavailable.
+- Keep the status visible when focusing Unpin on cards without parking actions.
+
 ## [0.2.11] - 2026-09-11
 
 ### Added
