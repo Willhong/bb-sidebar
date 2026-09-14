@@ -85,7 +85,10 @@ export default experimental_defineHostEntry({
         const path = canonicalRoots.find((root) => root.environmentId === owner)!.path;
         // Multiple BB environments can refer to the same checkout.
         for (const root of canonicalRoots.filter((root) => root.path === path)) {
-          ports.set(`${root.environmentId}:${detail.port}`, { environmentId: root.environmentId, ...detail });
+          const key = `${root.environmentId}:${detail.port}`;
+          // Docker enriches an observed listener; it must not replace its PID,
+          // bind address, or thread ownership with less specific metadata.
+          ports.set(key, { environmentId: root.environmentId, ...detail, ...ports.get(key) });
         }
       }
       for (const listener of listeners) {
