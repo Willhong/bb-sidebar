@@ -30,6 +30,7 @@ import { threadDisplayTitle } from "./inbox";
 import { InlineThreadTitle } from "./InlineThreadTitle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
 import { ProjectFavicon } from "./ProjectFavicon";
+import { OpenPortsIndicator } from "./OpenPorts";
 
 export interface ThreadReorderControls {
   disabled: boolean;
@@ -297,6 +298,7 @@ export function ThreadCard({
                 machine takes the branch's place rather than leaving the line
                 blank. */}
             <ThreadLocation thread={thread} />
+            <OpenPortsIndicator thread={thread} />
             {childThreads.length > 0 ? (
               <ChildThreadBadge
                 threads={childThreads}

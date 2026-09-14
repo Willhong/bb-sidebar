@@ -17,6 +17,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Automatic favicons, custom project icons, and two-step project removal
 - Expandable child-thread indicators with running and attention states
 - Live status, branch, pull request, and provider details
+- Subtle port icons for identified server-owning threads, with workspace port details in the hover card
 - Native bb navigation, split, rename, archive, and delete flows
 - Project submenu on thread cards for settings, rename, local paths, and removal
 - Regenerate a thread title from its last three accepted user messages
@@ -28,6 +29,18 @@ bb plugin install git:https://github.com/yusuf8834/bb-sidebar.git
 ```
 
 Then choose **BB Sidebar** under **Settings > Appearance > Sidebar**.
+
+Port discovery is built into BB Sidebar. Workspace details refresh every ten seconds and
+include listening TCP ports owned by processes in the workspace and published
+Docker Compose ports. Shared ports appear in the thread hover card. A row gets a
+muted port icon, without a count, only when the listening process carries a
+`BB_THREAD_ID` matching that thread and workspace. Missing or unreadable owner
+metadata leaves the row unmarked. Scans
+run on each workspace's machine and require macOS or Linux with `lsof` installed.
+Docker is optional. Inaccessible processes and containers without a Compose
+working-directory label cannot be attributed to a workspace.
+BB's own server and worker listeners are excluded. User and agent app servers
+remain visible, including servers launched through BB.
 
 Project icons use `t3.json`, common favicon and app icon paths, and local icon
 metadata. To pick a different image, open BB Sidebar's plugin settings and use

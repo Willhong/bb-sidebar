@@ -14,6 +14,7 @@ import { ProviderGlyph } from "./ProviderGlyph";
 import { StatusGlyph } from "./StatusGlyph";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { PROJECT_ICONS_CHANNEL, projectIconUrl } from "./project-icons";
+import { OpenPortDetails } from "./OpenPorts";
 
 export function ThreadDetailsTooltip({
   thread,
@@ -95,6 +96,7 @@ export function ThreadDetailsTooltip({
           </div>
         </div>
         <span className="sr-only">Status: {status}</span>
+        <OpenPortDetails thread={thread} />
       </div>
     </div>
   );
@@ -103,7 +105,7 @@ export function ThreadDetailsTooltip({
     <Tooltip
       label={label}
       side="right"
-      className="w-64 max-w-[calc(100vw-24px)] rounded-lg p-2.5 shadow-xl"
+      className="pointer-events-auto w-64 max-w-[calc(100vw-24px)] rounded-lg p-2.5 shadow-xl"
       showArrow={false}
       open={visible}
       onOpenChange={setOpen}

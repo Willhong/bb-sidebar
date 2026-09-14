@@ -15,6 +15,7 @@ import { threadDisplayTitle } from "./inbox";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { projectIconUrl } from "./project-icons";
 import { ThreadTitle } from "./ThreadTitle";
+import { OpenPortsIndicator } from "./OpenPorts";
 
 /**
  * Search is a separate flat mode. A parked match must not disappear behind
@@ -192,6 +193,7 @@ function SearchResultRow({
         )}
       >
         <ThreadTitle threadId={thread.id} title={title} className="min-w-0 flex-1 truncate" />
+        <OpenPortsIndicator thread={thread} />
         {projectName ? (
           <span className="flex max-w-28 shrink-0 items-center gap-1.5 text-2xs text-muted-foreground/70">
             <ProjectFavicon src={projectIconUrl} className="size-3" />

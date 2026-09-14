@@ -125,6 +125,13 @@ async function loadPlugin(
 }
 
 describe("lifecycle RPC", () => {
+  it("returns no ports when no threads have environments", async () => {
+    const harness = await loadPlugin();
+    await expect(harness.behavior.callRpc("getOpenPorts", {})).resolves.toEqual({
+      groups: [],
+    });
+  });
+
   it("returns only model and reasoning details, including unset options", async () => {
     const harness = await loadPlugin();
     harness.inspection.sdk.stub("threads.defaultExecutionOptions", async () => ({

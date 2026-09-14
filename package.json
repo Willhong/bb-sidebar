@@ -24,7 +24,8 @@
       "icon": "PanelLeft"
     },
     "app": "./app.tsx",
-    "server": "./src/server.ts"
+    "server": "./src/server.ts",
+    "host": "./src/ports-host.ts"
   },
   "keywords": [
     "bb-plugin",

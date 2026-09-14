@@ -14,6 +14,7 @@ import type { ConfiguredSnoozePreset } from "./lifecycle";
 import { InlineThreadTitle } from "./InlineThreadTitle";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { ThreadDetailsTooltip } from "./ThreadDetailsTooltip";
+import { OpenPortsIndicator } from "./OpenPorts";
 
 /**
  * A parked thread: one line instead of a card. Density comes from the user
@@ -144,6 +145,7 @@ export function SlimRow({
               )}
             />
           </span>
+          <OpenPortsIndicator thread={thread} />
           {/* The same slot as a card, so a shelf keeps the card's column. A
               snoozed row spends it on the wake time: when the thread comes
               BACK is that shelf's whole question, and it outranks an age the

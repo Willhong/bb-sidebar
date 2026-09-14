@@ -38,6 +38,7 @@ import { usePinnedReorder } from "./usePinnedReorder";
 import { useInboxReorder } from "./useInboxReorder";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import { WorkingSinceContext, useWorkingSince } from "./useWorkingSince";
+import { OpenPortsProvider } from "./OpenPorts";
 import {
   ALL_PROJECTS,
   filterByProject,
@@ -999,6 +1000,7 @@ export function ThreadInbox({
 
   return (
     <WorkingSinceContext.Provider value={workingSince}>
+    <OpenPortsProvider>
       <div className="flex min-h-0 flex-1 flex-col">
         {/* The one control the host has no equivalent for. Everything else in
             the chrome above — New thread, search — is bb's and stays bb's. */}
@@ -1222,6 +1224,7 @@ export function ThreadInbox({
           )}
         </div>
       </div>
+    </OpenPortsProvider>
     </WorkingSinceContext.Provider>
   );
 }

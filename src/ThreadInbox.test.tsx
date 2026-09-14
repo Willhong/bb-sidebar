@@ -137,6 +137,81 @@ const listProps = {
   Original: () => null,
 };
 
+it("shows port details in the thread hover card", async () => {
+  const openUrl = vi.fn(() => true);
+  renderSlot(inbox, listProps, {
+    openUrl,
+    sidebarThreads: {
+      status: "ready",
+      threads: [thread({ title: "Port details", environment: {
+        id: "env_ports", name: null, branchName: "main", workspaceDisplayKind: "other",
+      } })],
+      projects: [],
+    },
+    rpc: {
+      listLifecycle: () => ({ rows: [] }),
+      getOpenPorts: () => ({ groups: [{ environmentId: "env_ports", ports: [
+        { port: 3000, processName: "node", pid: 1234, address: "127.0.0.1", source: "process" },
+        { port: 5432, service: "postgres", container: "app-db-1", address: "0.0.0.0", source: "docker" },
+      ] }] }),
+      getThreadExecutionDetails: () => null,
+    },
+  });
+  fireEvent.pointerMove(screen.getByRole("link", { name: "Port details" }), { pointerType: "mouse" });
+  const details = await screen.findByRole("tooltip");
+  expect(details.textContent).toContain("Workspace ports (2)");
+  expect(details.textContent).toContain(":3000 node");
+  expect(details.textContent).toContain("127.0.0.1 · PID 1234");
+  expect(details.textContent).toContain(":5432 postgres");
+  expect(details.textContent).toContain("Docker · app-db-1");
+  expect(screen.queryByRole("img", { name: "Open ports started by this thread" })).toBeNull();
+  const portLink = screen.getAllByRole("link", { name: "Open port 3000" })[0]!;
+  expect(portLink.getAttribute("href")).toBe("http://127.0.0.1:3000/");
+  fireEvent.click(portLink);
+  expect(openUrl).toHaveBeenCalledWith("http://127.0.0.1:3000/");
+});
+
+it("marks only the owning thread without a count and clears its icon when the port closes", async () => {
+  const environment = { id: "env_ports", name: null, branchName: "main", workspaceDisplayKind: "other" as const };
+  let groups = [{ environmentId: environment.id, ports: [{ port: 3000, ownerThreadId: "ports_a" }, { port: 8080, ownerThreadId: "" }] }];
+  renderSlot(inbox, listProps, {
+    sidebarThreads: {
+      status: "ready",
+      threads: [
+        thread({ id: "ports_a", environment }),
+        thread({ id: "ports_b", environment }),
+        thread({ id: "no_ports" }),
+      ],
+      projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+    },
+    rpc: {
+      listLifecycle: () => ({ rows: [] }),
+      getOpenPorts: () => ({ groups }),
+    },
+  });
+  const label = "Open ports started by this thread";
+  await waitFor(() => expect(screen.getAllByRole("img", { name: label })).toHaveLength(1));
+  expect(screen.getByRole("img", { name: label }).textContent).toBe("");
+  expect(screen.getByRole("img", { name: label }).className).toContain("text-muted-foreground/60");
+  vi.useFakeTimers();
+  // Trigger a fresh provider mount so its next poll uses the fake clock.
+  cleanup();
+  renderSlot(inbox, listProps, {
+    sidebarThreads: { status: "ready", threads: [thread({ id: "ports_a", environment })], projects: [] },
+    rpc: {
+      listLifecycle: () => ({ rows: [] }),
+      getOpenPorts: () => ({ groups }),
+    },
+  });
+  await act(async () => {});
+  expect(screen.getByRole("img", { name: label })).toBeTruthy();
+  groups = [];
+  await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+  expect(screen.queryByRole("img", { name: label })).toBeNull();
+  cleanup();
+  vi.useRealTimers();
+});
+
 function render(
   threads: PluginSidebarThread[],
   projects = [{ id: "proj_1", name: "bb", isPersonal: false }],

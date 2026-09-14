@@ -33,6 +33,8 @@ import {
   type SidebarSettingsValues,
 } from "./sidebar-settings";
 import { configuredSnoozePresetError } from "./lifecycle";
+import { portSnapshotSchema } from "./open-ports";
+import { createPortDiscovery } from "./port-discovery";
 
 const migrations = [
   `CREATE TABLE IF NOT EXISTS thread_lifecycle (
@@ -183,6 +185,10 @@ const bulkMutationOutputSchema = z
   .strict();
 
 export const bbSidebarRpcContract = defineRpcContract({
+  getOpenPorts: {
+    input: z.object({}).strict(),
+    output: portSnapshotSchema,
+  },
   getThreadExecutionDetails: {
     input: threadIdSchema.strict(),
     output: z.object({
@@ -423,6 +429,7 @@ function iconMimeType(path: string, reported: string): string {
 }
 
 export default async function plugin(bb: BbPluginApi) {
+  const getOpenPorts = createPortDiscovery(bb);
   const regenerateTitle = createTitleRegenerator(bb);
   const db = bb.storage.database();
   bb.storage.migrate(db, migrations);
@@ -1114,6 +1121,7 @@ export default async function plugin(bb: BbPluginApi) {
   });
 
   bb.rpc.register(bbSidebarRpcContract, {
+    getOpenPorts,
     async getThreadExecutionDetails({ threadId }) {
       const options = await bb.sdk.threads.defaultExecutionOptions({ threadId });
       return options
