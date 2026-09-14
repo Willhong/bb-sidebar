@@ -7,7 +7,7 @@ import {
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
 import type { bbSidebarRpcContract } from "./server";
-import { Tooltip } from "./components/Tooltip";
+import { ThreadHoverCard } from "./components/ThreadHoverCard";
 import { threadDisplayTitle } from "./inbox";
 import { Icon, type IconName } from "./components/Icon";
 import { ProviderGlyph } from "./ProviderGlyph";
@@ -102,16 +102,13 @@ export function ThreadDetailsTooltip({
   );
 
   return (
-    <Tooltip
-      label={label}
-      side="right"
-      className="pointer-events-auto w-64 max-w-[calc(100vw-24px)] rounded-lg p-2.5 shadow-xl"
-      showArrow={false}
+    <ThreadHoverCard
+      content={label}
       open={visible}
       onOpenChange={setOpen}
     >
       {children}
-    </Tooltip>
+    </ThreadHoverCard>
   );
 }
 

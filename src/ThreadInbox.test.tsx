@@ -159,7 +159,7 @@ it("shows port details in the thread hover card", async () => {
     },
   });
   fireEvent.pointerMove(screen.getByRole("link", { name: "Port details" }), { pointerType: "mouse" });
-  const details = await screen.findByRole("tooltip");
+  const details = await screen.findByRole("dialog", { name: "Thread details" });
   expect(details.textContent).toContain("Workspace ports (2)");
   expect(details.textContent).toContain(":3000 node");
   expect(details.textContent).toContain("127.0.0.1 · PID 1234");
@@ -170,6 +170,14 @@ it("shows port details in the thread hover card", async () => {
   expect(portLink.getAttribute("href")).toBe("http://127.0.0.1:3000/");
   fireEvent.click(portLink);
   expect(openUrl).toHaveBeenCalledWith("http://127.0.0.1:3000/");
+  const row = screen.getByRole("link", { name: "Port details" });
+  act(() => row.focus());
+  fireEvent.keyDown(row, { key: "Tab" });
+  expect(document.activeElement).toBe(portLink);
+  fireEvent.keyDown(portLink, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Thread details" })).toBeNull());
+  expect(document.activeElement).toBe(row);
+
 });
 
 it("marks only the owning thread without a count and clears its icon when the port closes", async () => {
@@ -3830,7 +3838,7 @@ describe("card metadata", () => {
 
     expect(screen.queryByLabelText("Thread details")).toBeNull();
     fireEvent.pointerMove(await screen.findByRole("link", { name: "Thread metadata" }), { pointerType: "mouse" });
-    const details = await screen.findByRole("tooltip");
+    const details = await screen.findByRole("dialog", { name: "Thread details" });
     expect(details.textContent).toContain("Project: bb");
     expect(details.textContent).toContain("Environment: Feature worktree");
     expect(details.textContent).toContain("Branch: bb/details");

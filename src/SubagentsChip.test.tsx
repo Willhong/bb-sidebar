@@ -74,7 +74,7 @@ describe("SubagentsChip", () => {
     const row = screen.getByRole("button", { name: "Open child thread: Child" });
     fireEvent.pointerMove(row, { pointerType: "mouse" });
     await waitFor(() => {
-      const tooltip = screen.getByRole("tooltip");
+      const tooltip = screen.getByRole("dialog", { name: "Thread details" });
       expect(tooltip.textContent).toContain("Provider: codex");
       expect(tooltip.textContent).toContain(fail ? "Model: Unavailable" : "Model: gpt-6");
       if (!fail) expect(tooltip.textContent).toContain("Reasoning: high");

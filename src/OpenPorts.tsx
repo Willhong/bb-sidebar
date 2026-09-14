@@ -60,7 +60,7 @@ export function OpenPortDetails({ thread }: { thread: PluginSidebarThread }) {
               href={url}
               aria-label={`Open port ${port.port}`}
               onClick={(event) => event.stopPropagation()}
-              className="rounded-sm underline decoration-muted-foreground/40 underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="pointer-events-auto rounded-sm underline decoration-muted-foreground/40 underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               :{port.port}
             </UrlLink> : <span>:{port.port}</span>}
