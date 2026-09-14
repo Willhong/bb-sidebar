@@ -30,7 +30,7 @@ bb plugin install git:https://github.com/yusuf8834/bb-sidebar.git
 
 Then choose **BB Sidebar** under **Settings > Appearance > Sidebar**.
 
-Port discovery is built into BB Sidebar. Workspace details refresh every ten seconds and
+Port discovery is built into BB Sidebar. Workspace scans refresh at most every 30 seconds and
 include listening TCP ports owned by processes in the workspace and published
 Docker Compose ports. Shared ports appear in the thread hover card. A row gets a
 muted port icon, without a count, only when the listening process carries a
@@ -41,6 +41,8 @@ Docker is optional. Inaccessible processes and containers without a Compose
 working-directory label cannot be attributed to a workspace.
 BB's own server and worker listeners are excluded. User and agent app servers
 remain visible, including servers launched through BB.
+Environment locations are cached for one minute. Unreachable machines retry with
+increasing delays, up to five minutes, and their stale ports are cleared.
 
 To enable browser links, select **Port links on this device** in sidebar
 settings. Only ports on that selected host are linked; other hosts stay as text.
