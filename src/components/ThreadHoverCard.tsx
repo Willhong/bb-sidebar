@@ -78,7 +78,7 @@ export function ThreadHoverCard({ children, content, open, onOpenChange }: {
         }}
         onKeyDown={(event) => {
           if (event.key === "Tab" && !event.shiftKey && open) {
-            const first = panel.current?.querySelector<HTMLAnchorElement>("a[href]");
+            const first = panel.current?.querySelector<HTMLElement>("a[href], [data-port-scroll]");
             if (first) {
               event.preventDefault();
               restoreFocus.current = true;
@@ -107,7 +107,7 @@ export function ThreadHoverCard({ children, content, open, onOpenChange }: {
           onPointerLeave={scheduleClose}
           onFocusCapture={clearTimer}
           onKeyDown={(event) => {
-            const first = panel.current?.querySelector("a[href]");
+            const first = panel.current?.querySelector("a[href], [data-port-scroll]");
             if (event.key === "Tab" && event.shiftKey && event.target === first) {
               event.preventDefault();
               restoreFocus.current = true;
@@ -118,7 +118,7 @@ export function ThreadHoverCard({ children, content, open, onOpenChange }: {
             if (anchor.current?.contains(event.detail.originalEvent.target as Node)) event.preventDefault();
             else restoreFocus.current = false;
           }}
-          className="pointer-events-none z-50 w-64 max-w-[calc(100vw-24px)] rounded-lg border border-border bg-popover p-2.5 text-xs text-popover-foreground shadow-xl outline-none"
+          className="pointer-events-none z-50 max-h-[calc(100dvh-24px)] w-64 max-w-[calc(100vw-24px)] overflow-y-auto rounded-lg border border-border bg-popover p-2.5 text-xs text-popover-foreground shadow-xl outline-none"
         ><div id={`${panelId}-description`}>{content}</div></Popover.Content>
       </Popover.Portal>
     </Popover.Root>

@@ -51,6 +51,15 @@ export function OpenPortDetails({ thread }: { thread: PluginSidebarThread }) {
         <Icon name="Plug" className="size-3.5 shrink-0" aria-hidden />
         <span>Workspace ports ({ports.length})</span>
       </div>
+      <div
+        role={ports.length > 4 ? "region" : undefined}
+        aria-label={ports.length > 4 ? "Workspace port list" : undefined}
+        tabIndex={ports.length > 4 ? 0 : undefined}
+        data-port-scroll={ports.length > 4 ? "" : undefined}
+        className={ports.length > 4
+          ? "pointer-events-auto flex max-h-[min(12rem,30dvh)] flex-col gap-1.5 overflow-y-auto rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          : "flex flex-col gap-1.5"}
+      >
       {ports.map((port) => {
         const url = portBrowserUrl(port, thread.host?.id, localHostId);
         return (
@@ -73,6 +82,7 @@ export function OpenPortDetails({ thread }: { thread: PluginSidebarThread }) {
         </div>
         );
       })}
+      </div>
     </div>
   );
 }

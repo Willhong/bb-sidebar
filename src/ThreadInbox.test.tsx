@@ -180,6 +180,26 @@ it("shows port details in the thread hover card", async () => {
 
 });
 
+it("keeps a long workspace port list accessible even without local links", async () => {
+  renderSlot(inbox, listProps, {
+    sidebarThreads: { status: "ready", projects: [], threads: [thread({ title: "Many ports", environment: {
+      id: "env_ports", name: null, branchName: "main", workspaceDisplayKind: "other",
+    } })] },
+    rpc: {
+      listLifecycle: () => ({ rows: [] }), getThreadExecutionDetails: () => null,
+      getOpenPorts: () => ({ groups: [{ environmentId: "env_ports", ports: Array.from({ length: 20 }, (_, i) => ({ port: 8000 + i })) }] }),
+    },
+  });
+  const row = screen.getByRole("link", { name: "Many ports" });
+  act(() => row.focus());
+  const list = await screen.findByRole("region", { name: "Workspace port list" });
+  expect(within(list).getByText(":8019")).toBeDefined();
+  fireEvent.keyDown(row, { key: "Tab" });
+  expect(document.activeElement).toBe(list);
+  fireEvent.keyDown(list, { key: "Tab", shiftKey: true });
+  await waitFor(() => expect(document.activeElement).toBe(row));
+});
+
 it("marks only the owning thread without a count and clears its icon when the port closes", async () => {
   const environment = { id: "env_ports", name: null, branchName: "main", workspaceDisplayKind: "other" as const };
   let groups = [{ environmentId: environment.id, ports: [{ port: 3000, ownerThreadId: "ports_a" }, { port: 8080, ownerThreadId: "" }] }];
