@@ -138,12 +138,13 @@ const listProps = {
 };
 
 it("shows port details in the thread hover card", async () => {
+  localStorage.setItem("bb-sidebar:port-link-host:v1", "host_local");
   const openUrl = vi.fn(() => true);
   renderSlot(inbox, listProps, {
     openUrl,
     sidebarThreads: {
       status: "ready",
-      threads: [thread({ title: "Port details", environment: {
+      threads: [thread({ title: "Port details", host: { id: "host_local", name: "Local" }, environment: {
         id: "env_ports", name: null, branchName: "main", workspaceDisplayKind: "other",
       } })],
       projects: [],
@@ -312,6 +313,16 @@ describe("BB Sidebar registration", () => {
 });
 
 describe("sidebar settings", () => {
+  it("lists device hosts in settings and saves the local port-link choice", async () => {
+    renderSlot(sidebarSettings, {}, {
+      sidebarThreads: { status: "ready", projects: [], threads: [thread({ host: { id: "host_local", name: "Local Mac" } })] },
+      rpc: { getSidebarSettings: () => defaultSidebarSettings, listProjectIconSettings: () => ({ projects: [] }) },
+    });
+    const select = await screen.findByLabelText("Port links on this device");
+    expect(within(select).getByRole("option", { name: "Local Mac" })).toBeDefined();
+    fireEvent.change(select, { target: { value: "host_local" } });
+    expect(localStorage.getItem("bb-sidebar:port-link-host:v1")).toBe("host_local");
+  });
   it("groups related controls and saves them together", async () => {
     let saved: typeof defaultSidebarSettings | null = null;
     renderSlot(sidebarSettings, {}, {

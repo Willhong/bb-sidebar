@@ -17,6 +17,7 @@ import {
 } from "./sidebar-settings";
 import { ProjectIconSettings } from "./ProjectIconSettings";
 import { ProjectRemovalSettings } from "./ProjectRemovalSettings";
+import { PortLinkSettings } from "./PortLinkSettings";
 import {
   configuredSnoozePresetError,
   parseConfiguredSnoozePresets,
@@ -233,6 +234,7 @@ export function SidebarSettings() {
 
   return (
     <div className="max-w-3xl space-y-8 pb-4">
+      <PortLinkSettings />
       <SettingsGroup
         title="Thread organization"
         description="Choose when threads leave Active and which snooze shortcuts appear in the sidebar."

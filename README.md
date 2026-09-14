@@ -42,6 +42,11 @@ working-directory label cannot be attributed to a workspace.
 BB's own server and worker listeners are excluded. User and agent app servers
 remain visible, including servers launched through BB.
 
+To enable browser links, select **Port links on this device** in sidebar
+settings. Only ports on that selected host are linked; other hosts stay as text.
+IPv6 and concrete bind addresses are preserved. Links try HTTP, or HTTPS on
+443 and 8443; known database and other non-web service ports stay as text.
+
 Project icons use `t3.json`, common favicon and app icon paths, and local icon
 metadata. To pick a different image, open BB Sidebar's plugin settings and use
 the **Project icons** section. Projects without a matching image keep the
