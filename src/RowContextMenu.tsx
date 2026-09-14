@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
@@ -53,6 +53,7 @@ export function RowContextMenu({
   const portalScope = usePortalScopeProps();
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const regenerating = useTitleGenerating(thread.id);
+  const renameAfterClose = useRef(false);
   // Archive takes the children with it, and bb leaves every idle one's agent
   // session loaded. Release them alongside the archive. Working children are
   // skipped, so this never interrupts a turn archive itself would not.
@@ -94,7 +95,14 @@ export function RowContextMenu({
         <ContextMenu.Content
           {...portalScope}
           aria-label="Thread actions"
-          onCloseAutoFocus={onCloseAutoFocus}
+          onCloseAutoFocus={(event) => {
+            onCloseAutoFocus?.(event);
+            if (!renameAfterClose.current) return;
+            renameAfterClose.current = false;
+            // Hand focus to the editor after the menu releases its focus scope.
+            event.preventDefault();
+            onRename?.();
+          }}
           className="z-50 min-w-44 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
         >
           <Item onSelect={() => actions.open(thread.id, { split: true })}>
@@ -129,7 +137,7 @@ export function RowContextMenu({
           {onWake ? <Item onSelect={onWake}>Wake now</Item> : null}
           <Separator />
           {onRename ? (
-            <Item onSelect={() => globalThis.setTimeout(onRename, 0)}>
+            <Item onSelect={() => { renameAfterClose.current = true; }}>
               Rename
             </Item>
           ) : null}

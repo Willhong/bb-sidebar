@@ -62,7 +62,7 @@ export function InlineThreadTitle({
       }}
       onBlur={() => finish(true)}
       className={cn(
-        "h-6 w-full min-w-0 rounded border border-border bg-background px-1.5 text-inherit text-foreground outline-none focus:ring-1 focus:ring-ring",
+        "h-6 w-full min-w-0 appearance-none rounded border border-solid border-border bg-background px-1.5 text-inherit text-foreground shadow-none outline-none focus:border-ring",
         className,
       )}
     />

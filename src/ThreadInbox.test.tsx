@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   screen,
@@ -3460,12 +3461,18 @@ describe("row context menu", () => {
     const rendered = render([
       thread({ id: "thr_rename", title: "Original title" }),
     ]);
-    fireEvent.contextMenu(await screen.findByText("Original title"));
+    const row = await screen.findByRole("link", { name: "Original title" });
+    act(() => row.focus());
+    fireEvent.contextMenu(row);
     fireEvent.click(within(await screen.findByRole("menu")).getByText("Rename"));
 
     const input = await screen.findByRole("textbox", {
       name: "Rename Original title",
     });
+    // Let the menu's deferred focus restoration finish before typing.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+    expect(document.activeElement).toBe(input);
+    expect(input.isConnected).toBe(true);
     fireEvent.change(input, { target: { value: "Updated title" } });
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() =>
