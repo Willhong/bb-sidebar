@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [0.2.14] - 2026-09-15
+
+### Improved
+
+- Add a green glow, gentle checkmark tilt, and five sparkles to the settle button, with light and dark styling, keyboard focus, and reduced-motion support.
+- Keep the settle button's hit area fixed so hovering near a corner does not cause flickering.
+- Remove the settle tooltip while preserving its accessible label.
+
 ## [0.2.12] - 2026-09-12
 
 ### Fixed
