@@ -31,6 +31,7 @@ import { InlineThreadTitle } from "./InlineThreadTitle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { OpenPortsIndicator } from "./OpenPorts";
+import "./settle-button.css";
 
 export interface ThreadReorderControls {
   disabled: boolean;
@@ -478,20 +479,45 @@ function ParkButton({
   onActivate: () => void;
 }) {
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        aria-label={label}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onActivate();
-        }}
-        className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+    <button
+      type="button"
+      aria-label={label}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onActivate();
+      }}
+      className={cn(
+        "bb-sidebar-settle group/settle relative flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground",
+        "transition-colors duration-200 ease-out hover:text-emerald-700 dark:hover:text-emerald-300",
+        "focus-visible:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 dark:focus-visible:text-emerald-300",
+        "motion-reduce:transition-none",
+      )}
+    >
+      {/* Move only the artwork so hovering an edge cannot move the hit area. */}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none relative flex size-full items-center justify-center rounded-[inherit]",
+          "transition-[background-color,box-shadow,transform] duration-200 ease-out motion-reduce:transition-none",
+          "group-hover/settle:bg-emerald-500/15 group-hover/settle:shadow-[0_0_0_3px_rgb(16_185_129_/_0.08)] group-focus-visible/settle:bg-emerald-500/15",
+          "motion-safe:group-hover/settle:-translate-y-0.5 motion-safe:group-focus-visible/settle:-translate-y-0.5 motion-safe:group-active/settle:translate-y-0 motion-safe:group-active/settle:scale-90 group-active/settle:bg-emerald-500/25",
+        )}
       >
-        <Icon name="Check" className="size-3.5" />
-      </button>
-    </Tooltip>
+        <Icon
+          name="Check"
+          aria-hidden
+          className="size-3.5 transition-transform duration-200 ease-out motion-safe:group-hover/settle:rotate-[-8deg] motion-safe:group-hover/settle:scale-110 motion-safe:group-focus-visible/settle:rotate-[-8deg] motion-safe:group-focus-visible/settle:scale-110 motion-reduce:transition-none"
+        />
+        {[0, 1, 2, 3, 4].map((sparkle) => (
+          <span
+            key={sparkle}
+            aria-hidden="true"
+            className="bb-sidebar-settle-sparkle"
+          />
+        ))}
+      </span>
+    </button>
   );
 }
 
