@@ -8,28 +8,54 @@ import { usePortLinkHost } from "./PortLinkSettings";
 
 const OpenPortsContext = createContext<ReadonlyMap<string, readonly OpenPort[]>>(new Map());
 
+function samePorts(left: ReadonlyMap<string, readonly OpenPort[]>, right: ReadonlyMap<string, readonly OpenPort[]>) {
+  if (left.size !== right.size) return false;
+  return [...left].every(([environmentId, ports]) => {
+    const other = right.get(environmentId);
+    return other?.length === ports.length && ports.every((port, index) => {
+      const candidate = other[index];
+      return Object.keys(port).length === Object.keys(candidate).length &&
+        Object.entries(port).every(([key, value]) => candidate[key as keyof OpenPort] === value);
+    });
+  });
+}
+
 export function OpenPortsProvider({ children }: { children: ReactNode }) {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const [ports, setPorts] = useState<ReadonlyMap<string, readonly OpenPort[]>>(new Map());
 
   useEffect(() => {
     let disposed = false;
-    let timer: ReturnType<typeof setTimeout>;
+    let inFlight = false;
+    const isHidden = () => document.visibilityState === "hidden";
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    function publish(next: ReadonlyMap<string, readonly OpenPort[]>) {
+      if (!disposed) setPorts((previous) => samePorts(previous, next) ? previous : next);
+    }
     async function refresh() {
+      if (disposed || inFlight || isHidden()) return;
+      inFlight = true;
       try {
         const snapshot = await rpc.call("getOpenPorts", {});
-        if (!disposed) setPorts(portsByEnvironment(snapshot));
+        publish(portsByEnvironment(snapshot));
       } catch {
         // An unavailable scanner must not leave stale indicators behind.
-        if (!disposed) setPorts(new Map());
+        publish(new Map());
       } finally {
-        if (!disposed) timer = setTimeout(refresh, 10_000);
+        inFlight = false;
+        if (!disposed && !isHidden()) timer = setTimeout(refresh, 10_000);
       }
     }
+    function visibilityChanged() {
+      clearTimeout(timer);
+      if (!isHidden()) void refresh();
+    }
+    document.addEventListener("visibilitychange", visibilityChanged);
     void refresh();
     return () => {
       disposed = true;
       clearTimeout(timer);
+      document.removeEventListener("visibilitychange", visibilityChanged);
     };
   }, [rpc]);
 
