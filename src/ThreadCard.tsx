@@ -2,7 +2,6 @@ import {
   useId,
   useState,
   type KeyboardEventHandler,
-  type MouseEvent as ReactMouseEvent,
   type PointerEventHandler,
 } from "react";
 import {
@@ -55,7 +54,6 @@ export function ThreadCard({
   projectName,
   projectIconUrl,
   isActive,
-  isSelected,
   isWoke,
   canPark,
   snoozePresets,
@@ -63,7 +61,6 @@ export function ThreadCard({
   onSettle,
   onSnooze,
   onAcknowledgeWake,
-  onSelectionClick,
   childThreads,
   childrenByParent,
   activeThreadId,
@@ -78,7 +75,6 @@ export function ThreadCard({
   projectName: string | null;
   projectIconUrl: string | null;
   isActive: boolean;
-  isSelected: boolean;
   /** A snooze ended and has not yet been acknowledged. */
   isWoke: boolean;
   /** False while the thread is working or blocked on the user. */
@@ -88,7 +84,6 @@ export function ThreadCard({
   onSettle: () => void;
   onSnooze: (snoozedUntil: number) => void;
   onAcknowledgeWake: () => void;
-  onSelectionClick: (event: ReactMouseEvent<HTMLAnchorElement>) => boolean;
   childThreads: readonly PluginSidebarThread[];
   childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>;
   activeThreadId: string | null;
@@ -163,8 +158,6 @@ export function ThreadCard({
           className={cn(
             "group/card relative rounded-md px-2.5 py-2 transition-colors duration-150 ease-out motion-reduce:transition-none",
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
-            isSelected &&
-              "bg-sidebar-accent ring-1 ring-inset ring-primary/60",
             // A thread open in another pane gets a weaker tint than the active
             // row, so the two states stay distinguishable.
             !isActive && layout !== null && "bg-sidebar-accent/30",
@@ -176,9 +169,8 @@ export function ThreadCard({
               data-sidebar-thread-shortcut-target=""
               data-sidebar-thread-id={thread.id}
               href="#"
-              aria-label={`${isSelected ? "Selected, " : ""}${threadDisplayTitle(thread)}`}
+              aria-label={threadDisplayTitle(thread)}
               aria-current={isActive ? "page" : undefined}
-              data-selected={isSelected ? "true" : undefined}
               draggable={false}
               aria-keyshortcuts={
                 reorder ? "Alt+ArrowUp Alt+ArrowDown" : undefined
@@ -191,7 +183,6 @@ export function ThreadCard({
               onClick={(event) => {
                 event.preventDefault();
                 if (isRenaming || event.detail > 1) return;
-                if (onSelectionClick(event)) return;
                 if (isWoke) onAcknowledgeWake();
                 actions.open(thread.id, { split: false });
                 onNavigate();

@@ -1,4 +1,4 @@
-import { useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useState } from "react";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   type PluginSidebarThread,
@@ -28,7 +28,6 @@ export function SlimRow({
   projectName,
   projectIconUrl,
   isActive,
-  isSelected,
   shelf,
   wakeAt,
   now,
@@ -36,13 +35,11 @@ export function SlimRow({
   onNavigate,
   onRestore,
   onSnooze,
-  onSelectionClick,
 }: {
   thread: PluginSidebarThread;
   projectName: string | null;
   projectIconUrl: string | null;
   isActive: boolean;
-  isSelected: boolean;
   shelf: "snoozed" | "settled";
   wakeAt: number | null;
   now: number;
@@ -50,7 +47,6 @@ export function SlimRow({
   onNavigate: () => void;
   onRestore: () => void;
   onSnooze: (snoozedUntil: number) => void;
-  onSelectionClick: (event: ReactMouseEvent<HTMLAnchorElement>) => boolean;
 }) {
   const actions = useSidebarThreadActions();
   const title = threadDisplayTitle(thread);
@@ -72,8 +68,6 @@ export function SlimRow({
           className={cn(
             "group/slim relative flex h-8 items-center gap-2 rounded-md px-2.5 text-xs transition-colors duration-150 ease-out motion-reduce:transition-none",
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
-            isSelected &&
-              "bg-sidebar-accent ring-1 ring-inset ring-primary/60",
           )}
         >
           <ThreadDetailsTooltip thread={thread} disabled={isRenaming}>
@@ -81,13 +75,11 @@ export function SlimRow({
               data-sidebar-thread-shortcut-target=""
               data-sidebar-thread-id={thread.id}
               href="#"
-              aria-label={`${isSelected ? "Selected, " : ""}${rowLabel}`}
+              aria-label={rowLabel}
               aria-current={isActive ? "page" : undefined}
-              data-selected={isSelected ? "true" : undefined}
               onClick={(event) => {
                 event.preventDefault();
                 if (isRenaming || event.detail > 1) return;
-                if (onSelectionClick(event)) return;
                 actions.open(thread.id, { split: false });
                 onNavigate();
               }}

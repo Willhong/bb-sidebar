@@ -1,11 +1,11 @@
-export interface BulkActionFailure {
+export interface ThreadTaskFailure {
   threadId: string;
   error: string;
 }
 
-export interface BulkActionResult {
+export interface ThreadTaskResult {
   succeededThreadIds: string[];
-  failures: BulkActionFailure[];
+  failures: ThreadTaskFailure[];
 }
 
 function errorMessage(error: unknown): string {
@@ -15,12 +15,12 @@ function errorMessage(error: unknown): string {
   return "Unknown error";
 }
 
-export async function runBulkAction(
+export async function runThreadTasks(
   threadIds: readonly string[],
-  action: (threadId: string) => Promise<void>,
+  task: (threadId: string) => Promise<void>,
   concurrency = 4,
-): Promise<BulkActionResult> {
-  const results = new Map<string, BulkActionFailure | null>();
+): Promise<ThreadTaskResult> {
+  const results = new Map<string, ThreadTaskFailure | null>();
   let nextIndex = 0;
   const workerCount = Math.max(1, Math.min(concurrency, threadIds.length));
 
@@ -29,7 +29,7 @@ export async function runBulkAction(
       while (nextIndex < threadIds.length) {
         const threadId = threadIds[nextIndex++]!;
         try {
-          await action(threadId);
+          await task(threadId);
           results.set(threadId, null);
         } catch (error) {
           results.set(threadId, { threadId, error: errorMessage(error) });

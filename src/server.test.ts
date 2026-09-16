@@ -409,69 +409,6 @@ describe("lifecycle RPC", () => {
     ]);
   });
 
-  it("bulk settles successful rows and reports unpin failures", async () => {
-    const harness = await loadPlugin(async ({ threadId }) => {
-      if (threadId === "blocked") throw new Error("cannot unpin");
-      return makeThreadResponse({ id: threadId });
-    });
-
-    await expect(
-      harness.behavior.callRpc("bulkSettle", {
-        threadIds: ["first", "blocked", "third"],
-      }),
-    ).resolves.toEqual({
-      succeededThreadIds: ["first", "third"],
-      failures: [{ threadId: "blocked", error: "cannot unpin" }],
-    });
-    const lifecycle = (await harness.behavior.callRpc(
-      "listLifecycle",
-      {},
-    )) as LifecycleListResult;
-    expect(lifecycle.rows.map((row) => row.threadId).sort()).toEqual([
-      "first",
-      "third",
-    ]);
-    expect(harness.inspection.realtimeSignals).toContainEqual({
-      channel: "lifecycle",
-      payload: { threadIds: ["first", "third"] },
-    });
-  });
-
-  it("bulk snoozes rows with one lifecycle invalidation", async () => {
-    const harness = await loadPlugin();
-    const snoozedUntil = Date.now() + 60_000;
-
-    await expect(
-      harness.behavior.callRpc("bulkSnooze", {
-        threadIds: ["first", "second"],
-        snoozedUntil,
-      }),
-    ).resolves.toEqual({
-      succeededThreadIds: ["first", "second"],
-      failures: [],
-    });
-    const lifecycle = (await harness.behavior.callRpc(
-      "listLifecycle",
-      {},
-    )) as LifecycleListResult;
-    expect(lifecycle.rows).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ threadId: "first", snoozedUntil }),
-        expect.objectContaining({ threadId: "second", snoozedUntil }),
-      ]),
-    );
-    expect(
-      harness.inspection.realtimeSignals.filter(
-        (signal) => signal.channel === "lifecycle",
-      ),
-    ).toEqual([
-      {
-        channel: "lifecycle",
-        payload: { threadIds: ["first", "second"] },
-      },
-    ]);
-  });
-
   it("clears a woken snooze when the user acknowledges it", async () => {
     const harness = await loadPlugin();
     await harness.behavior.callRpc("snooze", {

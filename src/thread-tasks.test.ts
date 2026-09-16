@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { runBulkAction } from "./bulk-actions";
+import { runThreadTasks } from "./thread-tasks";
 
-describe("runBulkAction", () => {
+describe("runThreadTasks", () => {
   it("reports complete success in input order", async () => {
     const calls: string[] = [];
-    const result = await runBulkAction(["a", "b", "c"], async (threadId) => {
+    const result = await runThreadTasks(["a", "b", "c"], async (threadId) => {
       calls.push(threadId);
     });
 
@@ -16,7 +16,7 @@ describe("runBulkAction", () => {
   });
 
   it("keeps successes and failures separate after a partial failure", async () => {
-    const result = await runBulkAction(["a", "b", "c"], async (threadId) => {
+    const result = await runThreadTasks(["a", "b", "c"], async (threadId) => {
       if (threadId === "b") throw new Error("offline");
     });
 
@@ -29,7 +29,7 @@ describe("runBulkAction", () => {
   it("caps concurrent work", async () => {
     let active = 0;
     let maximum = 0;
-    await runBulkAction(
+    await runThreadTasks(
       ["a", "b", "c", "d", "e"],
       async () => {
         active += 1;

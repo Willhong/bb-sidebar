@@ -13,7 +13,7 @@ import {
   type AutoSettlePullRequest,
   type SettledOverride,
 } from "./auto-settle";
-import { runBulkAction } from "./bulk-actions";
+import { runThreadTasks } from "./thread-tasks";
 import {
   EMPTY_RECLAIM,
   planTerminalReclaim,
@@ -128,7 +128,7 @@ const orderedThreadIdsSchema = z
       });
     }
   });
-const bulkThreadIdsSchema = orderedThreadIdsSchema.min(1);
+const threadIdsSchema = orderedThreadIdsSchema.min(1);
 const projectIdSchema = z.string().trim().min(1);
 const projectIconPathSchema = z
   .string()
@@ -173,17 +173,6 @@ const iconBase64Schema = z
   .min(1)
   .max(1_400_000)
   .regex(/^[A-Za-z0-9+/]*={0,2}$/, "Invalid image data");
-const bulkMutationOutputSchema = z
-  .object({
-    succeededThreadIds: z.array(z.string()),
-    failures: z.array(
-      z
-        .object({ threadId: z.string(), error: z.string() })
-        .strict(),
-    ),
-  })
-  .strict();
-
 export const bbSidebarRpcContract = defineRpcContract({
   getOpenPorts: {
     input: z.object({}).strict(),
@@ -235,21 +224,8 @@ export const bbSidebarRpcContract = defineRpcContract({
     }),
     output: z.object({ ok: z.boolean(), reclaim: reclaimSchema }),
   },
-  bulkSettle: {
-    input: z.object({ threadIds: bulkThreadIdsSchema }).strict(),
-    output: bulkMutationOutputSchema,
-  },
-  bulkSnooze: {
-    input: z
-      .object({
-        threadIds: bulkThreadIdsSchema,
-        snoozedUntil: z.number().int().positive(),
-      })
-      .strict(),
-    output: bulkMutationOutputSchema,
-  },
   releaseRuntimes: {
-    input: z.object({ threadIds: bulkThreadIdsSchema }).strict(),
+    input: z.object({ threadIds: threadIdsSchema }).strict(),
     output: z.object({ ok: z.boolean() }),
   },
   unsnooze: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
@@ -1090,7 +1066,7 @@ export default async function plugin(bb: BbPluginApi) {
       bb.realtime.publish(LIFECYCLE_CHANNEL, { threadIds: changedThreadIds });
       // Outside the transaction, because releasing a runtime is a network call
       // and holding a write lock open across one would block every other write.
-      await runBulkAction(
+      await runThreadTasks(
         changes.flatMap((change) =>
           change.decision === "settle" ? [change.threadId] : [],
         ),
@@ -1189,64 +1165,13 @@ export default async function plugin(bb: BbPluginApi) {
       // middle of, so the wake time is not worth keeping a runtime warm for.
       return { ok: true, reclaim: await reclaimThreadResources(threadId) };
     },
-    async bulkSettle({ threadIds }) {
-      const unpinned = await runBulkAction(
-        threadIds,
-        async (threadId) => {
-          await bb.sdk.threads.unpin({ threadId });
-        },
-        4,
-      );
-      const now = Date.now();
-      writeMany(
-        unpinned.succeededThreadIds.map((threadId) => ({
-          threadId,
-          settledAt: now,
-          settledOverride: "settled",
-          snoozedUntil: null,
-          snoozedAt: null,
-        })),
-      );
-      publishLifecycleChanges(unpinned.succeededThreadIds);
-      // A bulk settle has no room to report per-thread counts, so it releases
-      // the same resources quietly and reports only the settles themselves.
-      await runBulkAction(
-        unpinned.succeededThreadIds,
-        async (threadId) => {
-          await reclaimThreadResources(threadId);
-        },
-        4,
-      );
-      return unpinned;
-    },
-    async bulkSnooze({ threadIds, snoozedUntil }) {
-      const now = Date.now();
-      writeMany(
-        threadIds.map((threadId) => ({
-          threadId,
-          settledAt: null,
-          settledOverride: null,
-          snoozedUntil,
-          snoozedAt: now,
-        })),
-      );
-      publishLifecycleChanges(threadIds);
-      await runBulkAction(
-        threadIds,
-        async (threadId) => {
-          await reclaimThreadResources(threadId);
-        },
-        4,
-      );
-      return { succeededThreadIds: [...threadIds], failures: [] };
-    },
     async releaseRuntimes({ threadIds }) {
       // bb's archive force-closes a thread's terminals but only stops its
       // runtime when a turn is in flight, so an idle thread archived from this
       // sidebar keeps its agent session loaded. Stopping an idle thread takes
       // bb's release path instead. Archived threads still accept a stop, so
       // this can race the archive, and a failure only misses a reclaim.
-      await runBulkAction(
+      await runThreadTasks(
         threadIds,
         async (threadId) => {
           await bb.sdk.threads.stop({ threadId });

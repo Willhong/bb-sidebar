@@ -1,6 +1,6 @@
 # BB Sidebar
 
-A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where you put them while status, snooze, settle, and bulk actions remain close at hand.
+A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where you put them while status, snooze, and settle actions remain close at hand.
 
 ![BB Sidebar in light mode](docs/screenshots/sidebar-light.jpeg)
 
@@ -13,7 +13,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Manual ordering plus Recent activity, Date created, and Project sort modes
 - Subtle project grouping for projects with multiple active threads
 - Pinned, Active, Inactive, Snoozed, and Settled shelves
-- Project filtering and multi-select bulk actions
+- Project filtering
 - Automatic favicons, custom project icons, and two-step project removal
 - Expandable child-thread indicators with running and attention states
 - Live status, branch, pull request, and provider details
