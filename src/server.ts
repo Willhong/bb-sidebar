@@ -644,24 +644,6 @@ export default async function plugin(bb: BbPluginApi) {
     const candidates: string[] = [];
     const customPath = readProjectIconOverride(projectId);
     if (customPath) candidates.push(customPath);
-    try {
-      const projectFile = await readProjectFile(
-        projectId,
-        environmentId,
-        "t3.json",
-      );
-      if (
-        projectFile.contentEncoding === "utf8" &&
-        projectFile.sizeBytes <= 100_000
-      ) {
-        const parsed = JSON.parse(projectFile.content) as { iconPath?: unknown };
-        if (typeof parsed.iconPath === "string") {
-          candidates.push(parsed.iconPath);
-        }
-      }
-    } catch {
-      // t3.json is optional.
-    }
     candidates.push(...PROJECT_ICON_CANDIDATES);
 
     let icon: ResolvedProjectIcon | null = null;

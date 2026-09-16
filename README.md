@@ -14,10 +14,11 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Subtle project grouping for projects with multiple active threads
 - Pinned, Active, Inactive, Snoozed, and Settled shelves
 - Project filtering
-- Automatic favicons, custom project icons, and two-step project removal
+- Automatic project icons with custom overrides
 - Expandable child-thread indicators with running and attention states
 - Live status, branch, pull request, and provider details
-- Subtle port icons for identified server-owning threads, with workspace port details in the hover card
+- Workspace port discovery, hover-card details, and optional browser links
+- Configurable inactive-thread and automatic cleanup rules
 - Native bb navigation, split, rename, archive, and delete flows
 - Project submenu on thread cards for settings, rename, local paths, and removal
 - Regenerate a thread title from its last three accepted user messages
@@ -29,50 +30,6 @@ bb plugin install git:https://github.com/yusuf8834/bb-sidebar.git
 ```
 
 Then choose **BB Sidebar** under **Settings > Appearance > Sidebar**.
-
-Port discovery is built into BB Sidebar. Workspace scans refresh at most every 30 seconds and
-include listening TCP ports owned by processes in the workspace and published
-Docker Compose ports. Shared ports appear in the thread hover card. A row gets a
-muted port icon, without a count, only when the listening process carries a
-`BB_THREAD_ID` matching that thread and workspace. Missing or unreadable owner
-metadata leaves the row unmarked. Scans
-run on each workspace's machine and require macOS or Linux with `lsof` installed.
-Docker is optional. Inaccessible processes and containers without a Compose
-working-directory label cannot be attributed to a workspace.
-BB's own server and worker listeners are excluded. User and agent app servers
-remain visible, including servers launched through BB.
-Environment locations are cached for one minute. Unreachable machines retry with
-increasing delays, up to five minutes, and their stale ports are cleared.
-
-To enable browser links, select **Port links on this device** in sidebar
-settings. Only ports on that selected host are linked; other hosts stay as text.
-IPv6 and concrete bind addresses are preserved. Links try HTTP, or HTTPS on
-443 and 8443; known database and other non-web service ports stay as text.
-
-Project icons use `t3.json`, common favicon and app icon paths, and local icon
-metadata. To pick a different image, open BB Sidebar's plugin settings and use
-the **Project icons** section. Projects without a matching image keep the
-icon-free layout.
-
-The Inactive shelf is enabled by default and moves unpinned threads after six
-hours without activity. Both the switch and hour threshold are available in
-BB Sidebar's plugin settings.
-
-Automatic cleanup settles quiet threads after three days by default. It also
-settles closed pull requests, and the settings page controls whether merged
-pull requests settle automatically. Manual un-settle keeps a thread active
-until new work clears that override.
-
-Right-click a thread and choose **Regenerate title** to summarize its last
-three accepted user messages, or fewer if available. Only message text is
-included, capped at 8,000 characters per message. Assistant replies, queued
-drafts, attachments, and older messages are excluded.
-
-Generation uses a temporary hidden helper in a personal workspace, with the
-model configured by `BB_INFERENCE` and `BB_INFERENCE_FALLBACK` for transient
-failures. These settings must name installed agent providers, such as `codex`.
-The current SDK cannot call bb's helper-inference service directly. The helper
-is removed afterward; failed generation leaves the existing title in place.
 
 ## Development
 

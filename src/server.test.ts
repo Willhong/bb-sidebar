@@ -688,13 +688,6 @@ describe("project icons", () => {
         {
           projectId: "proj_1",
           hostId: "host_1",
-          path: "t3.json",
-        },
-      ],
-      [
-        {
-          projectId: "proj_1",
-          hostId: "host_1",
           path: "favicon.svg",
         },
       ],
