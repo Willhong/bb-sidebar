@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## [0.2.15] - 2026-09-16
+
+### Added
+
+- Add Undo actions after settling, un-settling, and waking a snoozed thread.
+
+### Removed
+
+- Remove thread multi-selection and bulk actions.
+- Remove project icon lookup through `t3.json`.
+
+### Improved
+
+- Shorten the README feature documentation.
+
 ## [0.2.14] - 2026-09-15
 
 ### Improved
