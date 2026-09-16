@@ -3409,6 +3409,105 @@ describe("row context menu", () => {
     );
   });
 
+  it("supports Undo after settling and un-settling a thread", async () => {
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "round-trip", title: "Round trip" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        settle: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
+        unsettle: () => ({ ok: true }),
+      },
+    });
+
+    fireEvent.click(await screen.findByLabelText("Settle thread"));
+    await waitFor(() =>
+      expect(toastMocks.success).toHaveBeenCalledWith(
+        "Thread settled",
+        expect.objectContaining({
+          action: expect.objectContaining({ label: "Undo" }),
+        }),
+      ),
+    );
+    const settleToast = toastMocks.success.mock.calls.find(
+      ([message]) => message === "Thread settled",
+    )![1] as { action: { onClick: () => void } };
+    settleToast.action.onClick();
+
+    await waitFor(() =>
+      expect(rendered.rpcCalls).toContainEqual({
+        method: "unsettle",
+        input: { threadId: "round-trip" },
+      }),
+    );
+    const unsettleToast = toastMocks.success.mock.calls.find(
+      ([message]) => message === "Thread returned to the inbox",
+    )![1] as { action: { label: string; onClick: () => void } };
+    expect(unsettleToast.action.label).toBe("Undo");
+    unsettleToast.action.onClick();
+
+    await waitFor(() =>
+      expect(
+        rendered.rpcCalls.filter(
+          (call) =>
+            call.method === "settle" &&
+            (call.input as { threadId: string }).threadId === "round-trip",
+        ),
+      ).toHaveLength(2),
+    );
+  });
+
+  it("restores the original wake time when undoing an unsnooze", async () => {
+    const wakeAt = Date.now() + 3_600_000;
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "wake", title: "Wake round trip" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({
+          rows: [
+            {
+              threadId: "wake",
+              settledAt: null,
+              snoozedUntil: wakeAt,
+              snoozedAt: Date.now(),
+            },
+          ],
+        }),
+        unsnooze: () => ({ ok: true }),
+        snooze: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
+      },
+    });
+
+    const shelf = await screen.findByRole("region", { name: "Snoozed" });
+    fireEvent.click(within(shelf).getByRole("button"));
+    fireEvent.click(within(shelf).getByLabelText("Wake thread now"));
+    await waitFor(() =>
+      expect(toastMocks.success).toHaveBeenCalledWith(
+        "Thread woke up",
+        expect.objectContaining({
+          action: expect.objectContaining({ label: "Undo" }),
+        }),
+      ),
+    );
+    const wakeToast = toastMocks.success.mock.calls.find(
+      ([message]) => message === "Thread woke up",
+    )![1] as { action: { onClick: () => void } };
+    wakeToast.action.onClick();
+
+    await waitFor(() =>
+      expect(rendered.rpcCalls).toContainEqual({
+        method: "snooze",
+        input: { threadId: "wake", snoozedUntil: wakeAt },
+      }),
+    );
+  });
+
   it("reports mutation failures and leaves the active route alone", async () => {
     const rendered = renderSlot(
       inbox,

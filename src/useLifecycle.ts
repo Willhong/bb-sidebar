@@ -246,6 +246,13 @@ export function useLifecycle(
       if (inFlightThreadIds.current.has(threadId)) return false;
       inFlightThreadIds.current.add(threadId);
       let parkReminder: string | undefined;
+      // An unsnooze clears the row server-side, so its wake time has to be
+      // captured before the RPC; Undo re-snoozes with this absolute time to
+      // restore the exact schedule that was cancelled.
+      const unsnoozeWakeAt =
+        method === "unsnooze"
+          ? (rows.get(threadId)?.snoozedUntil ?? null)
+          : null;
       try {
         if (method === "snooze") {
           const { reclaim } = await rpc.call("snooze", {
@@ -285,14 +292,48 @@ export function useLifecycle(
       } else if (method === "settle") {
         // The reminder is the point of this toast: parking releases the agent
         // session but leaves any terminal the user typed in alone, and that is
-        // only obvious if it is said out loud.
+        // only obvious if it is said out loud. Undo returns the thread to the
+        // inbox; it does not re-pin, because settle never records the pin it
+        // removed.
         toast.success(SUCCESS_MESSAGE.settle, {
           description: parkReminder,
           duration:
             parkReminder === undefined ? undefined : PARK_REMINDER_TOAST_MS,
+          action: {
+            label: "Undo",
+            onClick: () => void mutate({ method: "unsettle", threadId }),
+          },
         });
-      } else if (method !== "acknowledgeWake") {
-        toast.success(SUCCESS_MESSAGE[method]);
+      } else if (method === "unsettle") {
+        // Undo re-settles, which re-runs the reclaim a settle always does:
+        // restoring the previous shelf means releasing what a wake restored.
+        toast.success(SUCCESS_MESSAGE.unsettle, {
+          action: {
+            label: "Undo",
+            onClick: () => void mutate({ method: "settle", threadId }),
+          },
+        });
+      } else if (method === "unsnooze") {
+        // Undo is only offered while the captured wake time is still ahead;
+        // a row whose snooze already elapsed has no schedule left to restore.
+        const undoWakeAt =
+          unsnoozeWakeAt !== null && unsnoozeWakeAt > Date.now()
+            ? unsnoozeWakeAt
+            : null;
+        toast.success(SUCCESS_MESSAGE.unsnooze, {
+          action:
+            undoWakeAt === null
+              ? undefined
+              : {
+                  label: "Undo",
+                  onClick: () =>
+                    void mutate({
+                      method: "snooze",
+                      threadId,
+                      snoozedUntil: undoWakeAt,
+                    }),
+                },
+        });
       }
       return true;
     };
