@@ -98,17 +98,38 @@ export function orderInboxThreads<T extends { readonly id: string }>(
 }
 
 /**
- * Reorder only the rows visible in a project scope while leaving every hidden
- * row in its global slot. This prevents a scoped drag from scrambling another
- * project's ordering.
+ * Re-apply a finished move to the order as it stands now, expressed as a move
+ * relative to the nearest row that outlived the gesture.
+ *
+ * Replaying the preview wholesale is not safe. It was built when the drag
+ * began, so by the time it lands it can reinstate rows that have since
+ * disappeared, ignore rows that have since arrived, and revert reorders made
+ * elsewhere while the pointer was down. Only the moved row's position relative
+ * to its neighbours is what the user actually asked for; everything else in
+ * the preview is incidental.
  */
-export function mergeVisibleOrder(
-  globalIds: readonly string[],
-  visibleIds: readonly string[],
+export function rebaseMovedId(
+  currentIds: readonly string[],
+  previewIds: readonly string[],
+  movingId: string,
 ): string[] {
-  const visibleSet = new Set(visibleIds);
-  let visibleIndex = 0;
-  return globalIds.map((id) =>
-    visibleSet.has(id) ? (visibleIds[visibleIndex++] ?? id) : id,
-  );
+  const index = previewIds.indexOf(movingId);
+  if (index < 0 || !currentIds.includes(movingId)) return [...currentIds];
+  const survives = new Set(currentIds);
+  // The row above is what the drop was aimed past, so prefer it; fall forward
+  // only when everything above the moved row is gone.
+  for (let above = index - 1; above >= 0; above--) {
+    const anchor = previewIds[above]!;
+    if (anchor !== movingId && survives.has(anchor)) {
+      return movePinnedId(currentIds, movingId, anchor, "after");
+    }
+  }
+  for (let below = index + 1; below < previewIds.length; below++) {
+    const anchor = previewIds[below]!;
+    if (anchor !== movingId && survives.has(anchor)) {
+      return movePinnedId(currentIds, movingId, anchor, "before");
+    }
+  }
+  return [...currentIds];
 }
+

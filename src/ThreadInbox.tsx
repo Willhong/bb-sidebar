@@ -15,7 +15,10 @@ import {
   useRpc,
   useSettings,
 } from "@get-bb/plugin-sdk/app";
-import { autoAnimate } from "@formkit/auto-animate";
+import {
+  autoAnimate,
+  type AnimationController,
+} from "@formkit/auto-animate";
 import { toast } from "sonner";
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
@@ -46,13 +49,14 @@ import {
   searchThreadsByTitle,
   sortByCreatedAtDescending,
   sortSettledThreads,
+  threadDisplayTitle,
   visibleInboxThreads,
 } from "./inbox";
 import {
   movePinnedId,
   movePinnedIdByOffset,
-  mergeVisibleOrder,
   orderPinnedThreads,
+  rebaseMovedId,
 } from "./pinned-order";
 import {
   DEFAULT_SNOOZE_PRESET_CONFIG,
@@ -108,16 +112,65 @@ function readChildExpansion(): Set<string> {
   }
 }
 
+// A drag reads insertion from row geometry, so no row may be mid-flight while
+// it reads: an animating rect reports where a row was, not the slot the order
+// has already given it. Every list registers here so a drag can hold them all
+// still for its duration.
+const listAnimations = new Set<AnimationController>();
+// Counted rather than a flag: two sidebars can be mounted at once, and the
+// first drag to finish must not re-enable animation under a drag still running
+// in the other one.
+let listAnimationHolds = 0;
+
+function suspendListAnimations(): void {
+  listAnimationHolds += 1;
+  if (listAnimationHolds > 1) return;
+  for (const animation of listAnimations) animation.disable();
+}
+
+function resumeListAnimations(): void {
+  if (listAnimationHolds === 0) return;
+  listAnimationHolds -= 1;
+  if (listAnimationHolds > 0) return;
+  for (const animation of listAnimations) animation.enable();
+}
+
 function useListAutoAnimate<T extends HTMLElement>() {
   return useCallback((node: T | null) => {
     if (!node || typeof window.matchMedia !== "function") return;
-    autoAnimate(node, { duration: 150, easing: "ease-out" });
+    const animation = autoAnimate(node, {
+      duration: 150,
+      easing: "ease-out",
+    });
+    if (listAnimationHolds > 0) animation.disable();
+    listAnimations.add(animation);
+    return () => {
+      listAnimations.delete(animation);
+      // Dropping our reference is not enough: auto-animate holds the parent in
+      // its own registry and keeps observers and a polling interval alive until
+      // it is told to let go.
+      animation.destroy?.();
+    };
   }, []);
 }
 
-function suppressNextClick(threadId: string): void {
-  let timeout = 0;
-  const suppress = (event: MouseEvent) => {
+/**
+ * Swallow the click a finished drag would otherwise fire on the row it started
+ * from. Armed the moment a drag engages rather than when it drops, so drop,
+ * Escape and a blurred window are all covered by the same listener.
+ *
+ * It disarms after one swallowed click, and on the next pointer press either
+ * way. Staying armed would eat the click that Enter raises on the same row —
+ * that click has no pointer press in front of it to clear the trap.
+ *
+ * Returns its own disarm so the caller can drop it on unmount.
+ */
+function armClickSuppression(threadId: string): () => void {
+  const disarm = () => {
+    window.removeEventListener("click", suppress, true);
+    window.removeEventListener("pointerdown", disarm, true);
+  };
+  function suppress(event: MouseEvent) {
     const clickedThreadId =
       event.target instanceof Element
         ? event.target
@@ -127,15 +180,46 @@ function suppressNextClick(threadId: string): void {
     if (clickedThreadId !== threadId) return;
     event.preventDefault();
     event.stopPropagation();
-    window.removeEventListener("click", suppress, true);
-    window.clearTimeout(timeout);
-  };
+    disarm();
+  }
   window.addEventListener("click", suppress, true);
-  timeout = window.setTimeout(
-    () => window.removeEventListener("click", suppress, true),
-    300,
+  window.addEventListener("pointerdown", disarm, true);
+  return disarm;
+}
+
+/** Nearest ancestor that actually scrolls, so a drag can reach past the fold. */
+function findScrollContainer(from: Element | null): HTMLElement | null {
+  for (
+    let node = from?.parentElement ?? null;
+    node;
+    node = node.parentElement
+  ) {
+    const overflowY = window.getComputedStyle(node).overflowY;
+    if (
+      (overflowY === "auto" ||
+        overflowY === "scroll" ||
+        overflowY === "overlay") &&
+      node.scrollHeight > node.clientHeight
+    ) {
+      return node;
+    }
+  }
+  return null;
+}
+
+function sameOrder(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length && left.every((id, index) => id === right[index])
   );
 }
+
+/** How close to an edge a drag must come before the shelf starts scrolling. */
+const DRAG_SCROLL_EDGE = 48;
+/** Pixels per frame at the very edge, ramping down to nothing at the hot zone. */
+const DRAG_SCROLL_SPEED = 14;
 
 interface ShelfExpansionState {
   active: boolean;
@@ -479,12 +563,27 @@ export function ThreadInbox({
   const dragOrderRef = useRef(dragOrder);
   dragOrderRef.current = dragOrder;
   const activeReorderCancelRef = useRef<(() => void) | null>(null);
+  const clickSuppressionRef = useRef<(() => void) | null>(null);
   useEffect(
     () => () => {
       activeReorderCancelRef.current?.();
+      // Suppression outlives the gesture on purpose, but not the component.
+      clickSuppressionRef.current?.();
     },
     [],
   );
+  // A thread can be deleted from anywhere while it is being dragged. Unmounting
+  // the whole sidebar already cancels; losing just this row has to as well, or
+  // the drag keeps steering an order around an id that is gone. This catches
+  // the thread leaving the host's list, not every way a row can stop being a
+  // valid drag source — archiving or parking it still leaves the gesture
+  // running until the drop rebases it.
+  useEffect(() => {
+    if (!dragOrder) return;
+    if (!threads.some((candidate) => candidate.id === dragOrder.movingId)) {
+      activeReorderCancelRef.current?.();
+    }
+  }, [dragOrder, threads]);
   const pinned = useMemo(() => {
     const ordered = orderPinnedThreads(pinnedBase, pinnedReorder.ids);
     return orderPinnedThreads(
@@ -539,43 +638,92 @@ export function ThreadInbox({
     [projectNameById, visibleInbox],
   );
 
+  // A drag installs its listeners once, at pointer-down, but the shelf keeps
+  // moving underneath it: the host pushes order changes mid-gesture. The order
+  // and the membership a drop depends on are therefore read through these refs
+  // rather than captured, or the write reverts whatever landed while the
+  // pointer was down. The row and shelf a gesture belongs to stay captured —
+  // those are what the gesture is about.
+  const reorderTargetsRef = useRef({
+    pinned: pinnedReorder,
+    inbox: inboxReorder,
+  });
+  reorderTargetsRef.current = { pinned: pinnedReorder, inbox: inboxReorder };
+  const visibleReorderIds = useCallback(
+    (thread: PluginSidebarThread, shelf: "pinned" | "inbox") =>
+      (shelf === "pinned" ? visiblePinned : visibleInbox)
+        .filter(
+          (candidate) =>
+            activeSortMode !== "project" ||
+            candidate.projectId === thread.projectId,
+        )
+        .map((candidate) => candidate.id),
+    [activeSortMode, visibleInbox, visiblePinned],
+  );
+  const visibleReorderIdsRef = useRef(visibleReorderIds);
+  visibleReorderIdsRef.current = visibleReorderIds;
+  // Keyboard reordering moves a row with no pointer to follow and no sound, so
+  // the only feedback a screen reader gets is what this region says.
+  const [reorderAnnouncement, setReorderAnnouncement] = useState("");
+
   const threadReorderControls = (
     thread: PluginSidebarThread,
     shelf: "pinned" | "inbox",
   ): ThreadReorderControls => {
     const target = shelf === "pinned" ? pinnedReorder : inboxReorder;
-    const visibleIds = (shelf === "pinned" ? visiblePinned : visibleInbox)
-      .filter(
-        (candidate) =>
-          activeSortMode !== "project" ||
-          candidate.projectId === thread.projectId,
-      )
-      .map((candidate) => candidate.id);
     return {
       disabled: target.isReordering,
       isDragging:
         dragOrder?.shelf === shelf && dragOrder.movingId === thread.id,
       onPointerDown: (event) => {
-        if (target.isReordering || event.button !== 0) return;
+        // Touch has no hover and no spare axis here: the row fills the width, so
+        // a finger dragging it is far more likely to mean "scroll the shelf".
+        // Reordering by touch needs a long-press to claim the gesture, which
+        // this does not implement, so it declines the gesture instead of
+        // competing with the scroller for it.
+        if (
+          target.isReordering ||
+          event.button !== 0 ||
+          event.pointerType === "touch"
+        ) {
+          return;
+        }
 
         activeReorderCancelRef.current?.();
         const pointerId = event.pointerId;
         const startX = event.clientX;
         const startY = event.clientY;
         const movingId = thread.id;
+        // Captured while the event is still being dispatched, which is the only
+        // time `currentTarget` is meaningful.
+        const rowAnchor = event.currentTarget;
         let engaged = false;
         let finished = false;
         let previousUserSelect = "";
         let previousCursor = "";
+        let listElement: HTMLElement | null = null;
+        let scrollContainer: HTMLElement | null = null;
+        let scrollFrame = 0;
+        let pointerX = startX;
+        let pointerY = startY;
 
         function cleanup() {
           window.removeEventListener("pointermove", onPointerMove);
           window.removeEventListener("pointerup", onPointerUp);
           window.removeEventListener("pointercancel", onPointerCancel);
           window.removeEventListener("keydown", onKeyDown);
+          window.removeEventListener("blur", cancel);
+          window.removeEventListener("resize", cancel);
+          window.removeEventListener("pagehide", cancel);
+          document.removeEventListener("visibilitychange", onVisibilityChange);
+          if (scrollFrame !== 0) {
+            window.cancelAnimationFrame(scrollFrame);
+            scrollFrame = 0;
+          }
           if (engaged) {
             document.body.style.userSelect = previousUserSelect;
             document.body.style.cursor = previousCursor;
+            resumeListAnimations();
           }
           if (activeReorderCancelRef.current === cancel) {
             activeReorderCancelRef.current = null;
@@ -598,48 +746,132 @@ export function ThreadInbox({
           previousCursor = document.body.style.cursor;
           document.body.style.userSelect = "none";
           document.body.style.cursor = "grabbing";
-          const next = { shelf, movingId, ids: visibleIds };
+          suspendListAnimations();
+          clickSuppressionRef.current?.();
+          clickSuppressionRef.current = armClickSuppression(movingId);
+          listElement = rowAnchor.closest("ul");
+          scrollContainer = findScrollContainer(listElement);
+          const next = {
+            shelf,
+            movingId,
+            ids: visibleReorderIdsRef.current(thread, shelf),
+          };
           dragOrderRef.current = next;
           setDragOrder(next);
+          scrollFrame = window.requestAnimationFrame(onScrollFrame);
         }
 
         function reorderAt(clientX: number, clientY: number) {
+          const current = dragOrderRef.current;
+          if (!current || current.shelf !== shelf) return;
+          const visibleIds = visibleReorderIdsRef.current(thread, shelf);
           const hit = document.elementFromPoint(clientX, clientY);
           const row = hit instanceof Element ? hit.closest("li") : null;
           const targetId = row
             ?.querySelector<HTMLAnchorElement>("[data-sidebar-thread-id]")
             ?.getAttribute("data-sidebar-thread-id");
-          const current = dragOrderRef.current;
+
+          let nextIds: string[] | null = null;
           if (
-            !row ||
-            !targetId ||
-            !visibleIds.includes(targetId) ||
-            !current ||
-            current.shelf !== shelf ||
-            current.movingId === targetId
+            row &&
+            targetId &&
+            visibleIds.includes(targetId) &&
+            current.movingId !== targetId
           ) {
-            return;
+            const rect = row.getBoundingClientRect();
+            nextIds = movePinnedId(
+              current.ids,
+              current.movingId,
+              targetId,
+              clientY < rect.top + rect.height / 2 ? "before" : "after",
+            );
+          } else if (!targetId && listElement) {
+            // Headers, padding and the run-off below the last row are not rows,
+            // so hit-testing alone strands a drag aimed at either end of a
+            // shelf. Resolve those against the list box instead — but only
+            // directly above or below it, or a pointer parked off to the side
+            // of the sidebar would keep snapping the row to an end.
+            const listRect = listElement.getBoundingClientRect();
+            const within =
+              clientX >= listRect.left && clientX <= listRect.right;
+            const before = within && clientY < listRect.top;
+            const after = within && clientY > listRect.bottom;
+            const edgeId = before
+              ? current.ids.find((id) => id !== current.movingId)
+              : after
+                ? [...current.ids]
+                    .reverse()
+                    .find((id) => id !== current.movingId)
+                : undefined;
+            if (edgeId) {
+              nextIds = movePinnedId(
+                current.ids,
+                current.movingId,
+                edgeId,
+                before ? "before" : "after",
+              );
+            }
           }
-          const rect = row.getBoundingClientRect();
-          const placement =
-            clientY < rect.top + rect.height / 2 ? "before" : "after";
-          const ids = movePinnedId(
-            current.ids,
-            current.movingId,
-            targetId,
-            placement,
-          );
-          const next = { ...current, ids };
+
+          if (!nextIds || sameOrder(nextIds, current.ids)) return;
+          const next = { ...current, ids: nextIds };
           dragOrderRef.current = next;
           setDragOrder(next);
         }
 
+        function onScrollFrame() {
+          scrollFrame = 0;
+          if (finished || !engaged) return;
+          if (scrollContainer) {
+            const rect = scrollContainer.getBoundingClientRect();
+            const fromTop = pointerY - rect.top;
+            const fromBottom = rect.bottom - pointerY;
+            // A pointer dragged off to the side has left the shelf; it should
+            // not keep driving it.
+            const within =
+              pointerX >= rect.left && pointerX <= rect.right;
+            const delta = !within
+              ? 0
+              : fromTop < DRAG_SCROLL_EDGE
+                ? -DRAG_SCROLL_SPEED *
+                  (1 - Math.max(fromTop, 0) / DRAG_SCROLL_EDGE)
+                : fromBottom < DRAG_SCROLL_EDGE
+                  ? DRAG_SCROLL_SPEED *
+                    (1 - Math.max(fromBottom, 0) / DRAG_SCROLL_EDGE)
+                  : 0;
+            if (delta !== 0) {
+              const scrollTop = scrollContainer.scrollTop;
+              scrollContainer.scrollTop = scrollTop + delta;
+              // Only re-resolve when the view actually moved, so a drag parked
+              // against an end does not churn state every frame. A host update
+              // can still shift rows without the scroll position changing;
+              // the next pointermove or the drop picks that up.
+              if (scrollContainer.scrollTop !== scrollTop) {
+                reorderAt(pointerX, pointerY);
+              }
+            }
+          }
+          scrollFrame = window.requestAnimationFrame(onScrollFrame);
+        }
+
         function onPointerMove(moveEvent: PointerEvent) {
           if (finished || moveEvent.pointerId !== pointerId) return;
+          // A button let go outside the window never delivers its pointerup.
+          if ((moveEvent.buttons & 1) === 0) {
+            cancel();
+            return;
+          }
+          pointerX = moveEvent.clientX;
+          pointerY = moveEvent.clientY;
           if (!engaged) {
             const deltaX = moveEvent.clientX - startX;
             const deltaY = moveEvent.clientY - startY;
-            if (Math.abs(deltaY) < 6 || Math.abs(deltaY) <= Math.abs(deltaX)) {
+            // Radial distance, but still vertical-dominant: a sideways gesture
+            // belongs to the host's drag-to-split, not to reordering.
+            if (
+              Math.hypot(deltaX, deltaY) < 6 ||
+              Math.abs(deltaY) <= Math.abs(deltaX)
+            ) {
               return;
             }
             engage();
@@ -650,6 +882,10 @@ export function ThreadInbox({
 
         function onPointerUp(upEvent: PointerEvent) {
           if (finished || upEvent.pointerId !== pointerId) return;
+          // Auto-scroll and host updates both move the list under a pointer
+          // that never moved again, so the last pointermove is not necessarily
+          // the last word on where this row belongs.
+          if (engaged) reorderAt(upEvent.clientX, upEvent.clientY);
           const current = dragOrderRef.current;
           finished = true;
           cleanup();
@@ -657,12 +893,17 @@ export function ThreadInbox({
 
           dragOrderRef.current = null;
           setDragOrder(null);
-          suppressNextClick(current.movingId);
-          const globalIds = mergeVisibleOrder(target.ids, current.ids);
           if (shelf === "pinned") {
-            void pinnedReorder.reorder(globalIds, current.movingId);
+            const live = reorderTargetsRef.current.pinned;
+            void live.reorder(
+              rebaseMovedId(live.ids, current.ids, current.movingId),
+              current.movingId,
+            );
           } else {
-            void inboxReorder.reorder(globalIds);
+            const live = reorderTargetsRef.current.inbox;
+            void live.reorder(
+              rebaseMovedId(live.ids, current.ids, current.movingId),
+            );
           }
         }
 
@@ -674,12 +915,22 @@ export function ThreadInbox({
           if (keyEvent.key === "Escape") cancel();
         }
 
+        function onVisibilityChange() {
+          if (document.visibilityState === "hidden") cancel();
+        }
+
         window.addEventListener("pointermove", onPointerMove, {
           passive: false,
         });
         window.addEventListener("pointerup", onPointerUp);
         window.addEventListener("pointercancel", onPointerCancel);
         window.addEventListener("keydown", onKeyDown);
+        // A gesture interrupted by lost focus, a hidden tab or a resize has no
+        // drop target left worth guessing at.
+        window.addEventListener("blur", cancel);
+        window.addEventListener("resize", cancel);
+        window.addEventListener("pagehide", cancel);
+        document.addEventListener("visibilitychange", onVisibilityChange);
         activeReorderCancelRef.current = cancel;
       },
       onKeyDown: (event) => {
@@ -692,16 +943,29 @@ export function ThreadInbox({
         }
         event.preventDefault();
         event.stopPropagation();
+        const currentIds = visibleReorderIdsRef.current(thread, shelf);
         const ids = movePinnedIdByOffset(
-          visibleIds,
+          currentIds,
           thread.id,
           event.key === "ArrowUp" ? -1 : 1,
         );
-        const globalIds = mergeVisibleOrder(target.ids, ids);
+        const shelfName = shelf === "pinned" ? "Pinned" : "Active";
+        const title = threadDisplayTitle(thread);
+        setReorderAnnouncement(
+          sameOrder(ids, currentIds)
+            ? `${title} is already ${
+                event.key === "ArrowUp" ? "first" : "last"
+              } in ${shelfName}`
+            : `${title} moved to ${ids.indexOf(thread.id) + 1} of ${
+                ids.length
+              } in ${shelfName}`,
+        );
         if (shelf === "pinned") {
-          void pinnedReorder.reorder(globalIds, thread.id);
+          const live = reorderTargetsRef.current.pinned;
+          void live.reorder(rebaseMovedId(live.ids, ids, thread.id), thread.id);
         } else {
-          void inboxReorder.reorder(globalIds);
+          const live = reorderTargetsRef.current.inbox;
+          void live.reorder(rebaseMovedId(live.ids, ids, thread.id));
         }
       },
     };
@@ -828,6 +1092,10 @@ export function ThreadInbox({
             onScopeChange={setScope}
           />
         </div>
+
+        <p role="status" aria-live="polite" className="sr-only">
+          {reorderAnnouncement}
+        </p>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
           {status === "loading" ? null : status === "error" ? (

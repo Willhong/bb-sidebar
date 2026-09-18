@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   movePinnedId,
   movePinnedIdByOffset,
-  mergeVisibleOrder,
+  rebaseMovedId,
   orderInboxThreads,
   orderPinnedThreads,
   pinnedNeighbors,
@@ -65,9 +65,27 @@ describe("pinned ordering", () => {
     ]);
   });
 
-  it("reorders a project-scoped subset without moving hidden rows", () => {
+  it("rebases a move onto the global order without reordering hidden rows", () => {
+    expect(rebaseMovedId(["a", "hidden", "b"], ["b", "a"], "a")).toEqual([
+      "hidden",
+      "b",
+      "a",
+    ]);
+  });
+
+  it("drops an anchor that disappeared mid-drag instead of reinstating it", () => {
+    // Preview said "put A after B", but B is gone by the time it lands.
+    expect(rebaseMovedId(["a", "c"], ["b", "a", "c"], "a")).toEqual(["a", "c"]);
+  });
+
+  it("keeps a reorder that landed elsewhere during the drag", () => {
+    // The host swapped D and C while the pointer was down; only A moves.
     expect(
-      mergeVisibleOrder(["a", "hidden", "b"], ["b", "a"]),
-    ).toEqual(["b", "hidden", "a"]);
+      rebaseMovedId(["a", "b", "d", "c"], ["b", "a", "c", "d"], "a"),
+    ).toEqual(["b", "a", "d", "c"]);
+  });
+
+  it("leaves the order alone when the moved row is gone", () => {
+    expect(rebaseMovedId(["b", "c"], ["b", "a", "c"], "a")).toEqual(["b", "c"]);
   });
 });

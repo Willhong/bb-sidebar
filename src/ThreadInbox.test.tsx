@@ -1850,6 +1850,7 @@ describe("ThreadInbox", () => {
       pointerId: 1,
     });
     fireEvent.pointerMove(window, {
+      buttons: 1,
       clientX: 20,
       clientY: 30,
       pointerId: 1,
@@ -1905,6 +1906,7 @@ describe("ThreadInbox", () => {
       pointerId: 1,
     });
     fireEvent.pointerMove(window, {
+      buttons: 1,
       clientX: 20,
       clientY: 30,
       pointerId: 1,
@@ -1932,6 +1934,296 @@ describe("ThreadInbox", () => {
     expect(
       rendered.rpcCalls.filter((call) => call.method === "reorderPinned"),
     ).toHaveLength(0);
+  });
+
+  it("stops suppressing clicks once the drag's own click is swallowed", async () => {
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Pin A", isPinned: true }),
+          thread({ id: "b", title: "Pin B", isPinned: true }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+    });
+
+    const card = await screen.findByRole("link", { name: "Pin A" });
+    const target = screen.getByText("Pin B").closest("li")!;
+    vi.mocked(document.elementFromPoint).mockReturnValue(target);
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      bottom: 40,
+      left: 0,
+      right: 200,
+      width: 200,
+      height: 40,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.pointerDown(card, {
+      button: 0,
+      clientX: 20,
+      clientY: 0,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(window, {
+      buttons: 1,
+      clientX: 20,
+      clientY: 30,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(window, {
+      clientX: 20,
+      clientY: 30,
+      pointerId: 1,
+    });
+
+    const openCalls = () =>
+      rendered.sidebarActionCalls.filter((call) => call.method === "open")
+        .length;
+    const settled = openCalls();
+
+    // The gesture's own click.
+    fireEvent.click(card);
+    expect(openCalls()).toBe(settled);
+
+    // Enter on the same row raises a click with no pointer press in front of
+    // it. Staying armed would swallow that one too, indefinitely.
+    fireEvent.click(card);
+    expect(openCalls()).toBe(settled + 1);
+  });
+
+  it("announces the new position after a keyboard reorder", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Pin A", isPinned: true }),
+          thread({ id: "b", title: "Pin B", isPinned: true }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        reorderPinned: () => ({ pinnedThreadIds: ["b", "a"] }),
+      },
+    });
+
+    const card = await screen.findByRole("link", { name: "Pin A" });
+    fireEvent.keyDown(card, { key: "ArrowDown", altKey: true });
+    expect(screen.getByText("Pin A moved to 2 of 2 in Pinned")).toBeDefined();
+
+    // The row is last now, so the same key is a no-op — and silence would leave
+    // a keyboard user unsure whether the press registered at all.
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("region", { name: "Pinned" }))
+          .getAllByRole("listitem")[0]!.textContent,
+      ).toContain("Pin B"),
+    );
+    fireEvent.keyDown(card, { key: "ArrowDown", altKey: true });
+    await waitFor(() =>
+      expect(screen.getByText("Pin A is already last in Pinned")).toBeDefined(),
+    );
+  });
+
+  it("leaves a touch gesture to the scroller instead of reordering", async () => {
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Pin A", isPinned: true }),
+          thread({ id: "b", title: "Pin B", isPinned: true }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+    });
+
+    const card = await screen.findByRole("link", { name: "Pin A" });
+    const target = screen.getByText("Pin B").closest("li")!;
+    vi.mocked(document.elementFromPoint).mockReturnValue(target);
+
+    fireEvent.pointerDown(card, {
+      button: 0,
+      clientX: 20,
+      clientY: 0,
+      pointerId: 1,
+      pointerType: "touch",
+    });
+    fireEvent.pointerMove(window, {
+      buttons: 1,
+      clientX: 20,
+      clientY: 30,
+      pointerId: 1,
+      pointerType: "touch",
+    });
+    fireEvent.pointerUp(window, {
+      clientX: 20,
+      clientY: 30,
+      pointerId: 1,
+      pointerType: "touch",
+    });
+
+    expect(
+      rendered.rpcCalls.filter((call) => call.method === "reorderPinned"),
+    ).toHaveLength(0);
+    expect(
+      within(screen.getByRole("region", { name: "Pinned" }))
+        .getAllByRole("listitem")[0]!.textContent,
+    ).toContain("Pin A");
+  });
+
+  it("does not open the thread when a drag is cancelled with Escape", async () => {
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Pin A", isPinned: true }),
+          thread({ id: "b", title: "Pin B", isPinned: true }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+    });
+
+    const card = await screen.findByRole("link", { name: "Pin A" });
+    const target = screen.getByText("Pin B").closest("li")!;
+    vi.mocked(document.elementFromPoint).mockReturnValue(target);
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      bottom: 40,
+      left: 0,
+      right: 200,
+      width: 200,
+      height: 40,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.pointerDown(card, {
+      button: 0,
+      clientX: 20,
+      clientY: 0,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(window, {
+      buttons: 1,
+      clientX: 20,
+      clientY: 30,
+      pointerId: 1,
+    });
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.pointerUp(window, {
+      clientX: 20,
+      clientY: 30,
+      pointerId: 1,
+    });
+    const openedBeforeClick = rendered.sidebarActionCalls.filter(
+      (call) => call.method === "open",
+    ).length;
+    // The browser raises this once the gesture ends. Cancelling a drag must not
+    // navigate into the row the drag started from.
+    fireEvent.click(card);
+
+    expect(
+      rendered.sidebarActionCalls.filter((call) => call.method === "open"),
+    ).toHaveLength(openedBeforeClick);
+  });
+
+  it("drops against the inbox order the host pushed mid-drag", async () => {
+    const now = Date.now();
+    let storedIds = ["a", "b", "z"];
+    let reorderInput: { inboxThreadIds: string[] } | null = null;
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "a",
+            title: "Inbox A",
+            createdAt: 3,
+            updatedAt: now - 60 * 60 * 1_000,
+          }),
+          thread({
+            id: "b",
+            title: "Inbox B",
+            createdAt: 2,
+            updatedAt: now - 60 * 60 * 1_000,
+          }),
+          // Inactive, so it holds a slot in the saved order without being a
+          // drop target. That is what makes a stale base observable.
+          thread({
+            id: "z",
+            title: "Inbox Z",
+            createdAt: 1,
+            updatedAt: now - 7 * 60 * 60 * 1_000,
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      settings: {
+        inactiveThreadsEnabled: true,
+        inactiveAfterHours: "6",
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        listInboxOrder: () => ({ inboxThreadIds: storedIds }),
+        reorderInbox: (input) => {
+          const parsed = input as { inboxThreadIds: string[] };
+          reorderInput = parsed;
+          return { inboxThreadIds: parsed.inboxThreadIds };
+        },
+      },
+    });
+
+    const card = await screen.findByRole("link", { name: "Inbox A" });
+    const target = screen.getByText("Inbox B").closest("li")!;
+    vi.mocked(document.elementFromPoint).mockReturnValue(target);
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      bottom: 40,
+      left: 0,
+      right: 200,
+      width: 200,
+      height: 40,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.pointerDown(card, {
+      button: 0,
+      clientX: 20,
+      clientY: 0,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(window, {
+      buttons: 1,
+      clientX: 20,
+      clientY: 30,
+      pointerId: 1,
+    });
+
+    storedIds = ["z", "a", "b"];
+    await rendered.emitRealtime("inbox-order", {});
+
+    fireEvent.pointerUp(window, {
+      clientX: 20,
+      clientY: 30,
+      pointerId: 1,
+    });
+
+    // Merged against ["z", "a", "b"]. Against the pointer-down base it would
+    // have been ["b", "a", "z"], silently reverting the push.
+    await waitFor(() =>
+      expect(reorderInput).toEqual({ inboxThreadIds: ["z", "b", "a"] }),
+    );
   });
 
   it("rolls back a failed reorder and ignores another move while saving", async () => {

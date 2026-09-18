@@ -149,8 +149,11 @@ export function ThreadCard({
     >
       <li
         className={cn(
-          "list-none transition-opacity duration-150 ease-out motion-reduce:transition-none",
-          reorder?.isDragging && "opacity-50",
+          "list-none",
+          // The row stays in the flow — the list reorders around it — but it
+          // is drawn over its neighbours rather than under them, so its shadow
+          // and ring are not clipped by the rows it sits between.
+          reorder?.isDragging && "relative z-20",
         )}
       >
         <div
@@ -161,6 +164,13 @@ export function ThreadCard({
             // A thread open in another pane gets a weaker tint than the active
             // row, so the two states stay distinguishable.
             !isActive && layout !== null && "bg-sidebar-accent/30",
+            // Lifted, not faded: the row under the cursor is the one the user
+            // is acting on, so it should read as the most present thing on the
+            // shelf. The two stacked gradients put an opaque sidebar base under
+            // the accent tint, because a translucent row would let the rows it
+            // passes over show straight through it.
+            reorder?.isDragging &&
+              "bg-[linear-gradient(var(--sidebar-accent),var(--sidebar-accent)),linear-gradient(var(--sidebar),var(--sidebar))] shadow-lg ring-1 ring-sidebar-border",
           )}
         >
           <ThreadDetailsTooltip thread={thread} disabled={isRenaming || !!reorder?.isDragging}>
@@ -193,7 +203,9 @@ export function ThreadCard({
                 setIsRenaming(true);
               }}
               className={cn(
-                "absolute inset-0 rounded-md",
+                // Vertical panning stays with the scroller; this row never
+                // claims a touch gesture for reordering.
+                "absolute inset-0 touch-pan-y rounded-md",
                 reorder && !reorder.disabled
                   ? "cursor-grab active:cursor-grabbing"
                   : "cursor-pointer",
