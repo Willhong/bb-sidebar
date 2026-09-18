@@ -2291,6 +2291,65 @@ describe("ThreadInbox", () => {
     );
   });
 
+  it.each(["Active", "Inactive"])(
+    "keeps %s order on remount while the saved order reloads",
+    async (shelf) => {
+      const sidebarThreads = {
+        status: "ready" as const,
+        threads: [
+          thread({ id: "a", title: "Inbox A", createdAt: 2 }),
+          thread({ id: "b", title: "Inbox B", createdAt: 1 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      };
+      const settings = { ...defaultSidebarSettings, inactiveThreadsEnabled: shelf === "Inactive" };
+      const first = renderSlot(inbox, listProps, {
+        sidebarThreads,
+        rpc: {
+          getSidebarSettings: () => settings,
+          listLifecycle: () => ({ rows: [] }),
+          listInboxOrder: () => ({ inboxThreadIds: ["b", "a"] }),
+        },
+      });
+      await screen.findByRole("region", { name: shelf });
+      if (shelf === "Inactive") {
+        fireEvent.click(within(screen.getByRole("region", { name: shelf })).getByRole("button", { expanded: false }));
+      }
+      const titles = () => within(screen.getByRole("region", { name: shelf }))
+        .getAllByRole("listitem").map((item) => item.textContent);
+      await waitFor(() => expect(titles()[0]).toContain("Inbox B"));
+      first.lifecycle.unmount();
+
+      const pending = deferred<{ inboxThreadIds: string[] }>();
+      const second = renderSlot(inbox, listProps, {
+        sidebarThreads,
+        rpc: {
+          getSidebarSettings: () => settings,
+          listLifecycle: () => ({ rows: [] }),
+          listInboxOrder: () => pending.promise,
+        },
+      });
+      // Assert the first render, before any RPC can restore the saved order.
+      expect(titles()[0]).toContain("Inbox B");
+      await act(async () => pending.reject(new Error("temporarily offline")));
+      expect(titles()[0]).toContain("Inbox B");
+      second.lifecycle.unmount();
+    },
+  );
+
+  it("uses saved disabled inactivity even when the legacy setting is enabled", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: { status: "ready", threads: [thread()], projects: [] },
+      settings: { inactiveThreadsEnabled: true, inactiveAfterHours: "6" },
+      rpc: {
+        getSidebarSettings: () => ({ ...defaultSidebarSettings, inactiveThreadsEnabled: false }),
+        listLifecycle: () => ({ rows: [] }),
+      },
+    });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Inactive" })).toBeNull());
+    expect(screen.getByRole("link", { name: "A thread" })).toBeDefined();
+  });
+
   it("reorders inbox threads with the keyboard and persists the full order", async () => {
     let reorderInput: unknown = null;
     renderSlot(inbox, listProps, {
@@ -2322,6 +2381,7 @@ describe("ThreadInbox", () => {
     expect(screen.getAllByRole("listitem")[0]!.textContent).toContain(
       "Inbox B",
     );
+    expect(JSON.parse(localStorage.getItem("bb-sidebar:inbox-order-cache:v1")!)).toEqual(["b", "a"]);
   });
 
   it("does not let a stale order refresh overwrite a successful reorder", async () => {
@@ -2352,8 +2412,8 @@ describe("ThreadInbox", () => {
       ),
     );
 
-    staleRead.resolve({ inboxThreadIds: ["a", "b"] });
-    await Promise.resolve();
+    await act(async () => staleRead.resolve({ inboxThreadIds: ["a", "b"] }));
+    expect(JSON.parse(localStorage.getItem("bb-sidebar:inbox-order-cache:v1")!)).toEqual(["b", "a"]);
     expect(screen.getAllByRole("listitem")[0]!.textContent).toContain(
       "Inbox B",
     );

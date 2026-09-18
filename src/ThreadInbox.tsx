@@ -421,7 +421,7 @@ export function ThreadInbox({
     [configuredSnoozePresets],
   );
   const inactiveAfterHours = parseInactiveAfterHours(
-    sidebarSettings?.inactiveThreadsEnabled === true ||
+    sidebarSettings?.inactiveThreadsEnabled ??
       legacySettings?.inactiveThreadsEnabled === true,
     sidebarSettings
       ? String(sidebarSettings.inactiveAfterHours)

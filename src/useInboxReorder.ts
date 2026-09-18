@@ -7,6 +7,33 @@ import {
 import { toast } from "sonner";
 import type { bbSidebarRpcContract } from "./server";
 import { orderInboxThreads } from "./pinned-order";
+import { safeSetItem } from "./lib/safe-storage";
+
+const ORDER_CACHE_KEY = "bb-sidebar:inbox-order-cache:v1";
+const ordersByRpcClient = new WeakMap<object, readonly string[]>();
+
+function cachedOrder(rpc: object): readonly string[] | null {
+  const cached = ordersByRpcClient.get(rpc);
+  if (cached) return cached;
+  try {
+    const value: unknown = JSON.parse(
+      window.localStorage.getItem(ORDER_CACHE_KEY) ?? "null",
+    );
+    if (Array.isArray(value) && value.every((id) => typeof id === "string")) {
+      return [...new Set(value)];
+    }
+  } catch {
+    // A missing or unavailable cache falls back to creation order.
+  }
+  return null;
+}
+
+function cacheOrder(rpc: object, ids: readonly string[]): readonly string[] {
+  const order = [...ids];
+  ordersByRpcClient.set(rpc, order);
+  safeSetItem(ORDER_CACHE_KEY, JSON.stringify(order));
+  return order;
+}
 
 export interface InboxReorderApi {
   threads: PluginSidebarThread[];
@@ -24,7 +51,9 @@ export function useInboxReorder(
   inboxThreads: readonly PluginSidebarThread[],
 ): InboxReorderApi {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
-  const [storedIds, setStoredIds] = useState<readonly string[] | null>(null);
+  const [storedIds, setStoredIds] = useState<readonly string[] | null>(
+    () => cachedOrder(rpc),
+  );
   const [optimisticIds, setOptimisticIds] = useState<
     readonly string[] | null
   >(null);
@@ -37,16 +66,18 @@ export function useInboxReorder(
     try {
       const result = await rpc.call("listInboxOrder", {});
       if (seq === requestSeq.current) {
-        setStoredIds(result.inboxThreadIds);
+        setStoredIds(cacheOrder(rpc, result.inboxThreadIds));
       }
     } catch {
-      // The default newest-first list remains fully usable if a backend reload
-      // briefly races this frontend generation.
+      // Keep the cached order if a backend reload briefly races this frontend.
     }
   }, [rpc]);
 
   useEffect(() => {
     void refresh();
+    return () => {
+      requestSeq.current += 1;
+    };
   }, [refresh]);
 
   useRealtime("inbox-order", () => {
@@ -75,7 +106,7 @@ export function useInboxReorder(
         // Ignore refreshes that raced the write. The mutation response is the
         // authoritative order for this client.
         requestSeq.current += 1;
-        setStoredIds(result.inboxThreadIds);
+        setStoredIds(cacheOrder(rpc, result.inboxThreadIds));
         setOptimisticIds(null);
         return true;
       } catch (error) {
