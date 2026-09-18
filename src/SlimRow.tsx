@@ -7,7 +7,7 @@ import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
 import { cn } from "./lib/utils";
 import { RowContextMenu } from "./RowContextMenu";
-import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
+import { StatusOrTime } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
 import { snoozeWakeLabel } from "./lifecycle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
@@ -29,6 +29,9 @@ export function SlimRow({
   projectIconUrl,
   isActive,
   shelf,
+  parkedAt,
+  onPark,
+  onSettle,
   wakeAt,
   now,
   snoozePresets,
@@ -40,7 +43,10 @@ export function SlimRow({
   projectName: string | null;
   projectIconUrl: string | null;
   isActive: boolean;
-  shelf: "snoozed" | "settled";
+  shelf: "parked" | "snoozed" | "settled";
+  parkedAt?: number | null;
+  onPark?: () => void;
+  onSettle?: () => void;
   wakeAt: number | null;
   now: number;
   snoozePresets: readonly ConfiguredSnoozePreset[];
@@ -56,7 +62,10 @@ export function SlimRow({
   return (
     <RowContextMenu
       thread={thread}
-      canSnooze={shelf === "settled"}
+      onPark={shelf !== "parked" ? onPark : undefined}
+      onResume={shelf === "parked" ? onRestore : undefined}
+      onSettle={shelf === "parked" ? onSettle : undefined}
+      canSnooze={shelf !== "snoozed"}
       snoozePresets={snoozePresets}
       onSnooze={onSnooze}
       onWake={shelf === "snoozed" ? onRestore : undefined}
@@ -138,24 +147,16 @@ export function SlimRow({
             />
           </span>
           <OpenPortsIndicator thread={thread} />
-          {/* The same slot as a card, so a shelf keeps the card's column. A
-              snoozed row spends it on the wake time: when the thread comes
-              BACK is that shelf's whole question, and it outranks an age the
-              user has already decided to ignore.
-
-              The restore button shares this one cell instead of following it.
-              A button of its own would sit between the age and the row's edge
-              and push the whole column off the card's, which is the one thing
-              the fixed slot exists to prevent. On touch devices, keep both
-              visible side by side so the wake countdown stays readable. */}
+          {/* Size to the label so the port icon stays beside it. Keep enough
+              room for the restore button, which replaces the label on hover.
+              On touch devices, show both side by side. */}
           <span
-            className={cn(
-              STATUS_SLOT_CLASS,
-              "pointer-events-none relative tabular-nums text-2xs text-muted-foreground/60 [@media(hover:none)]:w-auto [@media(hover:none)]:min-w-20 [@media(hover:none)]:gap-2",
-            )}
+            className="pointer-events-none relative flex min-w-5 shrink-0 items-center justify-end tabular-nums text-2xs text-muted-foreground/60 [@media(hover:none)]:gap-2"
           >
             <span className="flex items-center transition-opacity duration-150 ease-out [@media(hover:hover)]:group-hover/slim:opacity-0 motion-reduce:transition-none">
-              {shelf === "snoozed" && wakeAt !== null ? (
+              {shelf === "parked" && parkedAt != null ? (
+                `Waiting ${Math.max(0, Math.floor((now - parkedAt) / 86_400_000))}d`
+              ) : shelf === "snoozed" && wakeAt !== null ? (
                 snoozeWakeLabel(wakeAt, now)
               ) : (
                 <StatusOrTime thread={thread} now={now} />
@@ -163,13 +164,15 @@ export function SlimRow({
             </span>
             <Tooltip
               label={
-                shelf === "snoozed" ? "Wake thread now" : "Un-settle thread"
+                shelf === "parked" ? "Resume thread" : shelf === "snoozed" ? "Wake thread now" : "Un-settle thread"
               }
             >
               <button
                 type="button"
                 aria-label={
-                  shelf === "snoozed"
+                  shelf === "parked"
+                    ? "Resume thread"
+                    : shelf === "snoozed"
                     ? "Wake thread now"
                     : "Un-settle thread"
                 }

@@ -6,6 +6,7 @@ const DAY_MS = 24 * 60 * 60 * 1_000;
 export type SettledOverride = "active" | "settled";
 
 export interface AutoSettleLifecycleState {
+  parkedAt?: number | null;
   settledAt: number | null;
   settledOverride: SettledOverride | null;
   snoozedUntil: number | null;
@@ -45,6 +46,7 @@ function cannotAutoSettle(
     thread.status === "pending" ||
     thread.status === "starting" ||
     thread.status === "stopping" ||
+    lifecycle?.parkedAt != null ||
     lifecycle?.snoozedUntil != null
   );
 }

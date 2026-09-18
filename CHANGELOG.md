@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a Parked section for threads waiting on others, with Park, Resume, Undo, waiting age, and protection from automatic cleanup.
+
 ## [0.2.15] - 2026-09-16
 
 ### Added

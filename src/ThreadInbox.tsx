@@ -225,6 +225,7 @@ interface ShelfExpansionState {
   active: boolean;
   pinned: boolean;
   inactive: boolean;
+  parked: boolean;
   snoozed: boolean;
   settled: boolean;
 }
@@ -233,6 +234,7 @@ const DEFAULT_SHELF_EXPANSION: ShelfExpansionState = {
   active: true,
   pinned: true,
   inactive: false,
+  parked: false,
   snoozed: false,
   settled: false,
 };
@@ -248,6 +250,7 @@ function readShelfExpansion(): ShelfExpansionState {
       // Pinned became independently collapsible after the first stored shape.
       pinned: parsed.pinned !== false,
       inactive: parsed.inactive === true,
+      parked: parsed.parked === true,
       snoozed: parsed.snoozed === true,
       settled: parsed.settled === true,
     };
@@ -503,6 +506,7 @@ export function ThreadInbox({
     inactiveBase,
     allPinnedBase,
     allInboxBase,
+    parked,
     snoozed,
     settled,
   } = useMemo(() => {
@@ -515,11 +519,13 @@ export function ThreadInbox({
     // an orphan whose parent is not on screen stays here.
     const visible = hideChildrenOfVisibleParents(scoped);
     const active: typeof visible = [];
+    const onParkedShelf: typeof visible = [];
     const onSnoozeShelf: typeof visible = [];
     const onSettledShelf: typeof visible = [];
     for (const thread of visible) {
       const shelf = lifecycle.shelfFor(thread);
-      if (shelf === "snoozed") onSnoozeShelf.push(thread);
+      if (shelf === "parked") onParkedShelf.push(thread);
+      else if (shelf === "snoozed") onSnoozeShelf.push(thread);
       else if (shelf === "settled") onSettledShelf.push(thread);
       else active.push(thread);
     }
@@ -544,6 +550,7 @@ export function ThreadInbox({
       // reorder elsewhere must not silently discard their old slot.
       allPinnedBase: allSplit.pinned,
       allInboxBase: sortByCreatedAtDescending(allSplit.inbox),
+      parked: sortSettledThreads(onParkedShelf, lifecycle.parkedAtFor),
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozed: [...onSnoozeShelf].sort(
         (left, right) =>
@@ -984,6 +991,15 @@ export function ThreadInbox({
     () => searchThreadsByTitle(searchCandidates, searchQuery),
     [searchCandidates, searchQuery],
   );
+  const visibleParked = useMemo(
+    () =>
+      visibleShelfThreads(
+        parked,
+        expandedShelves.parked,
+        activeListThreadId,
+      ),
+    [activeListThreadId, expandedShelves.parked, parked],
+  );
   const visibleSnoozed = useMemo(
     () =>
       visibleShelfThreads(
@@ -1051,6 +1067,9 @@ export function ThreadInbox({
       canPark={lifecycle.canPark(thread)}
       snoozePresets={snoozePresets}
       onNavigate={onNavigate}
+      onPark={() =>
+        void parkActiveThread(thread, () => lifecycle.park(thread.id))
+      }
       onSettle={() =>
         void parkActiveThread(thread, () => lifecycle.settle(thread.id))
       }
@@ -1224,7 +1243,26 @@ export function ThreadInbox({
               inactive.length === 0 ? (
                 <ActiveEmptyState />
               ) : null}
-              <ParkedShelf
+              <CompactShelf
+                label="Parked"
+                threads={parked}
+                projectNameById={projectNameById}
+                expanded={expandedShelves.parked}
+                onToggle={() =>
+                  setExpandedShelves((current) => ({
+                    ...current,
+                    parked: !current.parked,
+                  }))
+                }
+                shelf="parked"
+                visibleThreads={visibleParked}
+                activeThreadId={activeThreadId}
+                lifecycle={lifecycle}
+                snoozePresets={snoozePresets}
+                onNavigate={onNavigate}
+                projectIconRevision={projectIconRevision}
+              />
+              <CompactShelf
                 label="Snoozed"
                 threads={snoozed}
                 projectNameById={projectNameById}
@@ -1243,7 +1281,7 @@ export function ThreadInbox({
                 onNavigate={onNavigate}
                 projectIconRevision={projectIconRevision}
               />
-              <ParkedShelf
+              <CompactShelf
                 label="Settled"
                 threads={settled}
                 projectNameById={projectNameById}
@@ -1325,7 +1363,7 @@ function ActiveEmptyState() {
  * parked — the count is the whole footprint when collapsed — and the shelf
  * vanishes entirely at zero.
  */
-function ParkedShelf({
+function CompactShelf({
   label,
   threads,
   projectNameById,
@@ -1346,7 +1384,7 @@ function ParkedShelf({
   projectNameById?: ReadonlyMap<string, string>;
   expanded: boolean;
   onToggle: () => void;
-  shelf: "snoozed" | "settled";
+  shelf: "parked" | "snoozed" | "settled";
   visibleThreads: readonly PluginSidebarThread[];
   activeThreadId: string | null;
   lifecycle: LifecycleApi;
@@ -1381,15 +1419,20 @@ function ParkedShelf({
             )}
             isActive={thread.id === activeThreadId}
             shelf={shelf}
+            parkedAt={lifecycle.parkedAtFor(thread)}
+            onPark={() => void lifecycle.park(thread.id)}
+            onSettle={() => void lifecycle.settle(thread.id)}
             wakeAt={lifecycle.wakeAtFor(thread)}
             now={now}
             snoozePresets={snoozePresets}
             onSnooze={(until) => void lifecycle.snooze(thread.id, until)}
             onNavigate={onNavigate}
             onRestore={() =>
-              shelf === "snoozed"
-                ? void lifecycle.unsnooze(thread.id)
-                : void lifecycle.unsettle(thread.id)
+              shelf === "parked"
+                ? void lifecycle.resume(thread.id)
+                : shelf === "snoozed"
+                  ? void lifecycle.unsnooze(thread.id)
+                  : void lifecycle.unsettle(thread.id)
             }
           />
         ))}

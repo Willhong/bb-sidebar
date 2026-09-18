@@ -40,23 +40,27 @@ describe("sidebar port discovery", () => {
       expect(scan).toHaveBeenCalledTimes(2);
       await discover();
       expect(scan).toHaveBeenCalledTimes(2);
+      discover.invalidate();
+      await discover();
+      expect(scan).toHaveBeenCalledTimes(4);
+      scan.mockClear();
       offline = true;
       clock.mockReturnValue(131_000);
       expect(await discover()).toEqual({ groups: [] });
-      expect(scan).toHaveBeenCalledTimes(4);
+      expect(scan).toHaveBeenCalledTimes(2);
       clock.mockReturnValue(162_000);
       await discover();
-      expect(scan).toHaveBeenCalledTimes(6);
+      expect(scan).toHaveBeenCalledTimes(4);
       clock.mockReturnValue(193_000);
       await discover();
-      expect(scan).toHaveBeenCalledTimes(6); // Second failure backs off for a minute.
+      expect(scan).toHaveBeenCalledTimes(4); // Second failure backs off for a minute.
       offline = false;
       clock.mockReturnValue(224_000);
       expect((await discover()).groups).toHaveLength(2);
-      expect(scan).toHaveBeenCalledTimes(8);
+      expect(scan).toHaveBeenCalledTimes(6);
       clock.mockReturnValue(255_000);
       await discover();
-      expect(scan).toHaveBeenCalledTimes(10); // Recovery resets backoff.
+      expect(scan).toHaveBeenCalledTimes(8); // Recovery resets backoff.
     } finally {
       clock.mockRestore();
       await harness.lifecycle.dispose();

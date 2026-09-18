@@ -280,3 +280,17 @@ describe("nextWakeDelayMs", () => {
     expect(nextWakeDelayMs([Number.MAX_SAFE_INTEGER], 0)).toBe(MAX_TIMEOUT_MS);
   });
 });
+
+
+describe("parked shelf", () => {
+  it("waits indefinitely, including when already unread", () => {
+    expect(resolveShelf(row({ parkedAt: 100 }), { ...quiet, isUnread: true }, 1e12)).toBe("parked");
+  });
+  it.each([
+    { latestAttentionAt: 101 },
+    { isWorking: true },
+    { hasPendingInteraction: true },
+  ])("returns to Active for fresh activity: %j", (signals) => {
+    expect(resolveShelf(row({ parkedAt: 100 }), { ...quiet, ...signals }, 200)).toBe("active");
+  });
+});

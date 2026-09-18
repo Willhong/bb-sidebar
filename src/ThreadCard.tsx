@@ -58,6 +58,7 @@ export function ThreadCard({
   canPark,
   snoozePresets,
   onNavigate,
+  onPark,
   onSettle,
   onSnooze,
   onAcknowledgeWake,
@@ -81,6 +82,7 @@ export function ThreadCard({
   canPark: boolean;
   snoozePresets: readonly ConfiguredSnoozePreset[];
   onNavigate: () => void;
+  onPark?: () => void;
   onSettle: () => void;
   onSnooze: (snoozedUntil: number) => void;
   onAcknowledgeWake: () => void;
@@ -140,6 +142,7 @@ export function ThreadCard({
   return (
     <RowContextMenu
       thread={thread}
+      onPark={canPark ? onPark : undefined}
       canSnooze={canPark}
       canArchive={canPark}
       snoozePresets={snoozePresets}

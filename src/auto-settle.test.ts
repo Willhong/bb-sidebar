@@ -209,3 +209,12 @@ describe("automatic settle policy", () => {
     ).toBe("keep");
   });
 });
+
+
+it("never automatically settles parked work or requests its PR", () => {
+  const parked = lifecycle({ parkedAt: DAY });
+  expect(autoSettleNeedsPullRequest(parked, quietThread)).toBe(false);
+  for (const pullRequest of [{ outcome: "absent" as const }, { outcome: "available" as const, state: "merged" as const, updatedAt: new Date(NOW).toISOString() }]) {
+    expect(decideAutoSettle({ lifecycle: parked, now: NOW, pullRequest, settings, thread: quietThread })).toBe("keep");
+  }
+});

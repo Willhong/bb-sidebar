@@ -1,7 +1,7 @@
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 
 /**
- * The settled / snoozed lifecycle, as pure functions over stored rows.
+ * The parked / settled / snoozed lifecycle, as pure functions over stored rows.
  *
  * This state lives in the PLUGIN's own database, never on bb's thread. That
  * keeps a plugin concept out of bb's schema and out of the host-daemon
@@ -10,6 +10,8 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 
 export interface ThreadLifecycleRow {
   threadId: string;
+  /** When the user parked it to wait on someone else. */
+  parkedAt?: number | null;
   /** When the user settled it; null when it is active. */
   settledAt: number | null;
   /** Explicit user choice. Null or absent means policy-owned state. */
@@ -30,7 +32,7 @@ export interface ThreadActivitySignals {
   latestAttentionAt: number;
 }
 
-export type ThreadShelf = "active" | "snoozed" | "settled";
+export type ThreadShelf = "active" | "parked" | "snoozed" | "settled";
 export type WakeReason = "timer" | "attention";
 
 /**
@@ -107,6 +109,10 @@ export function resolveShelf(
 ): ThreadShelf {
   if (row === undefined) return "active";
   if (!canPark(signals)) return "active";
+
+  if (row.parkedAt != null) {
+    return signals.latestAttentionAt > row.parkedAt ? "active" : "parked";
+  }
 
   if (row.snoozedUntil !== null) {
     if (resolveWakeReason(row, signals, now) === null) return "snoozed";

@@ -9,13 +9,14 @@ async function forEachConcurrent<T>(items: T[], limit: number, visit: (item: T) 
   }));
 }
 
-export function createPortDiscovery(bb: BbPluginApi): () => Promise<PortSnapshot> {
+export function createPortDiscovery(bb: BbPluginApi) {
   const host = bb.hosts.experimental_client({ contract: portScanContract });
   const controller = new AbortController();
   bb.onDispose(() => controller.abort());
   let cached: PortSnapshot = { groups: [] };
   let scannedAt = -Infinity;
   let pending: Promise<PortSnapshot> | null = null;
+  let generation = 0;
   const environments = new Map<string, { root: PortRoot; hostId: string; expiresAt: number }>();
   const failures = new Map<string, { attempts: number; retryAt: number }>();
 
@@ -78,15 +79,22 @@ export function createPortDiscovery(bb: BbPluginApi): () => Promise<PortSnapshot
     return { groups };
   }
 
-  return () => {
+  const discover = () => {
     if (pending) return pending;
     controller.signal.throwIfAborted();
     if (Date.now() - scannedAt < 30_000) return Promise.resolve(cached);
+    const scanGeneration = generation;
     pending = scan().then((snapshot) => {
       cached = snapshot;
-      scannedAt = Date.now();
+      scannedAt = scanGeneration === generation ? Date.now() : -Infinity;
       return snapshot;
     }).finally(() => { pending = null; });
     return pending;
   };
+  return Object.assign(discover, {
+    invalidate() {
+      generation++;
+      scannedAt = -Infinity;
+    },
+  });
 }

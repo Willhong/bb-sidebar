@@ -35,6 +35,8 @@ import {
 import { configuredSnoozePresetError } from "./lifecycle";
 import { portSnapshotSchema } from "./open-ports";
 import { createPortDiscovery } from "./port-discovery";
+import { createThreadPortActions } from "./thread-ports";
+import { ownedPortTargetSchema, closePortsResultSchema } from "./close-owned-ports";
 
 const migrations = [
   `CREATE TABLE IF NOT EXISTS thread_lifecycle (
@@ -77,10 +79,12 @@ const migrations = [
    )`,
   `ALTER TABLE sidebar_settings
      ADD COLUMN show_running_children_when_collapsed INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE thread_lifecycle ADD COLUMN parked_at INTEGER`,
 ];
 
 export interface StoredLifecycleRow {
   threadId: string;
+  parkedAt?: number | null;
   settledAt: number | null;
   settledOverride: SettledOverride | null;
   snoozedUntil: number | null;
@@ -89,6 +93,7 @@ export interface StoredLifecycleRow {
 
 interface LifecycleDbRow {
   thread_id: string;
+  parked_at: number | null;
   settled_at: number | null;
   settled_override: SettledOverride | null;
   snoozed_until: number | null;
@@ -174,6 +179,14 @@ const iconBase64Schema = z
   .max(1_400_000)
   .regex(/^[A-Za-z0-9+/]*={0,2}$/, "Invalid image data");
 export const bbSidebarRpcContract = defineRpcContract({
+  getThreadPorts: {
+    input: threadIdSchema,
+    output: z.object({ ports: z.array(ownedPortTargetSchema) }),
+  },
+  closeThreadPorts: {
+    input: threadIdSchema.extend({ ports: z.array(ownedPortTargetSchema).min(1).max(1000) }),
+    output: closePortsResultSchema,
+  },
   getOpenPorts: {
     input: z.object({}).strict(),
     output: portSnapshotSchema,
@@ -203,6 +216,7 @@ export const bbSidebarRpcContract = defineRpcContract({
       rows: z.array(
         z.object({
           threadId: z.string(),
+          parkedAt: z.number().nullable().optional(),
           settledAt: z.number().nullable(),
           settledOverride: z.enum(["active", "settled"]).nullable().optional(),
           snoozedUntil: z.number().nullable(),
@@ -215,6 +229,11 @@ export const bbSidebarRpcContract = defineRpcContract({
     input: threadIdSchema,
     output: z.object({ ok: z.boolean(), reclaim: reclaimSchema }),
   },
+  park: {
+    input: threadIdSchema,
+    output: z.object({ ok: z.boolean(), reclaim: reclaimSchema }),
+  },
+  resume: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
   unsettle: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
   snooze: {
     input: z.object({
@@ -406,6 +425,7 @@ function iconMimeType(path: string, reported: string): string {
 
 export default async function plugin(bb: BbPluginApi) {
   const getOpenPorts = createPortDiscovery(bb);
+  const threadPortActions = createThreadPortActions(bb);
   const regenerateTitle = createTitleRegenerator(bb);
   const db = bb.storage.database();
   bb.storage.migrate(db, migrations);
@@ -740,12 +760,13 @@ export default async function plugin(bb: BbPluginApi) {
       db
         .prepare(
           `SELECT thread_id, settled_at, settled_override,
-                  snoozed_until, snoozed_at
+                  snoozed_until, snoozed_at, parked_at
              FROM thread_lifecycle`,
         )
         .all() as LifecycleDbRow[]
     ).map((row) => ({
       threadId: row.thread_id,
+      parkedAt: row.parked_at,
       settledAt: row.settled_at,
       settledOverride: row.settled_override,
       snoozedUntil: row.snoozed_until,
@@ -756,7 +777,7 @@ export default async function plugin(bb: BbPluginApi) {
     const row = db
       .prepare(
         `SELECT thread_id, settled_at, settled_override,
-                snoozed_until, snoozed_at
+                snoozed_until, snoozed_at, parked_at
            FROM thread_lifecycle
           WHERE thread_id = ?`,
       )
@@ -764,6 +785,7 @@ export default async function plugin(bb: BbPluginApi) {
     return row
       ? {
           threadId: row.thread_id,
+          parkedAt: row.parked_at,
           settledAt: row.settled_at,
           settledOverride: row.settled_override,
           snoozedUntil: row.snoozed_until,
@@ -775,19 +797,21 @@ export default async function plugin(bb: BbPluginApi) {
   const write = (row: StoredLifecycleRow, publish = true): void => {
     db.prepare(
       `INSERT INTO thread_lifecycle
-         (thread_id, settled_at, settled_override, snoozed_until, snoozed_at)
-       VALUES (?, ?, ?, ?, ?)
+         (thread_id, settled_at, settled_override, snoozed_until, snoozed_at, parked_at)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(thread_id) DO UPDATE SET
          settled_at = excluded.settled_at,
          settled_override = excluded.settled_override,
          snoozed_until = excluded.snoozed_until,
-         snoozed_at = excluded.snoozed_at`,
+         snoozed_at = excluded.snoozed_at,
+         parked_at = excluded.parked_at`,
     ).run(
       row.threadId,
       row.settledAt,
       row.settledOverride,
       row.snoozedUntil,
       row.snoozedAt,
+      row.parkedAt ?? null,
     );
     if (publish) {
       bb.realtime.publish(LIFECYCLE_CHANNEL, { threadId: row.threadId });
@@ -814,7 +838,7 @@ export default async function plugin(bb: BbPluginApi) {
     const row = readOne(threadId);
     if (
       row === null ||
-      (row.settledAt === null && row.settledOverride === null)
+      (row.settledAt === null && row.settledOverride === null && row.parkedAt == null)
     ) {
       return false;
     }
@@ -1025,7 +1049,8 @@ export default async function plugin(bb: BbPluginApi) {
         onMerge: configured.autoSettleOnMerge,
       };
       const changes = threads.flatMap((thread) => {
-        const row = lifecycleByThreadId.get(thread.id) ?? null;
+        // Re-read after PR lookups so a concurrent Park action wins.
+        const row = readOne(thread.id);
         const decision = decideAutoSettle({
           lifecycle: row,
           now,
@@ -1080,6 +1105,17 @@ export default async function plugin(bb: BbPluginApi) {
 
   bb.rpc.register(bbSidebarRpcContract, {
     getOpenPorts,
+    getThreadPorts: threadPortActions.getThreadPorts,
+    async closeThreadPorts(input) {
+      if (readOne(input.threadId)?.settledOverride !== "settled") {
+        throw new Error("Thread is no longer settled");
+      }
+      try {
+        return await threadPortActions.closeThreadPorts(input);
+      } finally {
+        getOpenPorts.invalidate();
+      }
+    },
     async getThreadExecutionDetails({ threadId }) {
       const options = await bb.sdk.threads.defaultExecutionOptions({ threadId });
       return options
@@ -1102,6 +1138,27 @@ export default async function plugin(bb: BbPluginApi) {
     },
     async listLifecycle() {
       return { rows: readAll() };
+    },
+    async park({ threadId }) {
+      write({
+        threadId,
+        parkedAt: Date.now(),
+        settledAt: null,
+        settledOverride: null,
+        snoozedUntil: null,
+        snoozedAt: null,
+      });
+      return { ok: true, reclaim: await reclaimThreadResources(threadId) };
+    },
+    async resume({ threadId }) {
+      write({
+        threadId,
+        settledAt: null,
+        settledOverride: "active",
+        snoozedUntil: null,
+        snoozedAt: null,
+      });
+      return { ok: true };
     },
     async settle({ threadId }) {
       // Native pinning and this plugin's settled shelf are competing ways to

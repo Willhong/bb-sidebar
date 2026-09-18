@@ -63,7 +63,7 @@ export function safeSetItem(key: string, value: string): boolean {
 }
 
 function lifecycleRecency(row: ThreadLifecycleRow): number {
-  let max = 0;
+  let max = row.parkedAt ?? 0;
   if (typeof row.snoozedUntil === "number" && Number.isFinite(row.snoozedUntil)) {
     max = Math.max(max, row.snoozedUntil);
   }

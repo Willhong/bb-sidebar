@@ -16,6 +16,8 @@ import type { SidebarProvider } from "./ProviderGlyph";
 const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
+  message: vi.fn(),
+  dismiss: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({ toast: toastMocks }));
@@ -3261,6 +3263,7 @@ describe("row context menu", () => {
       "Open in split",
       "Project",
       "Pin",
+      "Park thread",
       "Settle",
       "Snooze",
       "Rename",
@@ -3526,6 +3529,30 @@ describe("row context menu", () => {
         input: { threadId: "dedupe" },
       }),
     );
+  });
+
+  it("asks to close owned ports after settling, and only closes on confirmation", async () => {
+    const ports = [{ port: 3000, pid: 123 }];
+    const close = vi.fn(() => ({ signalled: [3000], skipped: [], failed: [] }));
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_ports", title: "Port owner" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        settle: () => ({ ok: true, reclaim: SETTLED_NOTHING }),
+        getThreadPorts: () => ({ ports }),
+        closeThreadPorts: close,
+      },
+    });
+    fireEvent.click(await screen.findByLabelText("Settle thread"));
+    await waitFor(() => expect(toastMocks.message).toHaveBeenCalledWith("Close this thread's ports?", expect.anything()));
+    expect(close).not.toHaveBeenCalled();
+    const options = toastMocks.message.mock.calls.find(([message]) => message === "Close this thread's ports?")![1];
+    await act(async () => options.action.onClick());
+    expect(close).toHaveBeenCalledWith({ threadId: "thr_ports", ports });
   });
 
   it("supports Undo after settling and un-settling a thread", async () => {
@@ -4310,4 +4337,34 @@ describe("pull request badge", () => {
       (await screen.findByRole("link", { name: "#412" })).className,
     ).toContain("text-violet-600");
   });
+});
+
+
+it("keeps parked threads parked when opened and offers Resume with Undo", async () => {
+  const resume = vi.fn(() => ({ ok: true }));
+  const park = vi.fn(() => ({ ok: true, reclaim: SETTLED_NOTHING }));
+  const rendered = renderSlot(inbox, listProps, {
+    sidebarThreads: {
+      status: "ready",
+      threads: [thread({ id: "waiting", title: "Awaiting review", isPinned: true })],
+      projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+    },
+    rpc: {
+      listLifecycle: () => ({ rows: [{ threadId: "waiting", parkedAt: Date.now() - 5 * 86400000, settledAt: null, snoozedUntil: null, snoozedAt: null }] }),
+      resume,
+      park,
+    },
+  });
+  const shelf = await screen.findByRole("region", { name: "Parked" });
+  fireEvent.click(within(shelf).getByRole("button"));
+  expect(within(shelf).getByText("Waiting 5d")).toBeDefined();
+  fireEvent.click(within(shelf).getByRole("link", { name: "bb · Awaiting review" }));
+  expect(resume).not.toHaveBeenCalled();
+  expect(rendered.sidebarActionCalls).toContainEqual({ method: "open", threadId: "waiting", options: { split: false } });
+  fireEvent.click(within(shelf).getByRole("button", { name: "Resume thread" }));
+  await waitFor(() => expect(resume).toHaveBeenCalled());
+  const toast = toastMocks.success.mock.calls.find(([message]) => message === "Thread returned to the inbox");
+  expect(toast).toBeDefined();
+  act(() => toast![1].action.onClick());
+  await waitFor(() => expect(park).toHaveBeenCalled());
 });

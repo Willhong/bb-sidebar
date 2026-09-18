@@ -12,7 +12,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 
 - Manual ordering plus Recent activity, Date created, and Project sort modes
 - Subtle project grouping for projects with multiple active threads
-- Pinned, Active, Inactive, Snoozed, and Settled shelves
+- Pinned, Active, Inactive, Parked, Snoozed, and Settled shelves
 - Project filtering
 - Automatic project icons with custom overrides
 - Expandable child-thread indicators with running and attention states
@@ -44,3 +44,5 @@ bb plugin install path:. --yes
 This project includes code adapted from [bb-plugin-t3sidebar](https://github.com/SawyerHood/bb-plugin-t3sidebar). Its MIT copyright notice remains in [LICENSE](LICENSE).
 
 The sidebar design and interactions are directly inspired by [T3 Code](https://github.com/pingdotgg/t3code), which is also released under the MIT License. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
+
+Park threads while waiting on someone else. Use **Park thread** in the context menu and **Resume** when ready. Parked threads have no timer and are excluded from automatic cleanup. Opening one leaves it parked; new thread activity brings it back to Active.

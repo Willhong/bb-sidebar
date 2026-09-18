@@ -31,6 +31,8 @@ export function RowContextMenu({
   canArchive = true,
   snoozePresets = [],
   onSnooze,
+  onPark,
+  onResume,
   onSettle,
   onUnsettle,
   onWake,
@@ -42,6 +44,8 @@ export function RowContextMenu({
   canArchive?: boolean;
   snoozePresets?: readonly ConfiguredSnoozePreset[];
   onSnooze?: (snoozedUntil: number) => void;
+  onPark?: () => void;
+  onResume?: () => void;
   onSettle?: () => void;
   onUnsettle?: () => void;
   onWake?: () => void;
@@ -129,6 +133,8 @@ export function RowContextMenu({
           >
             {thread.isPinned ? "Unpin" : "Pin"}
           </Item>
+          {onPark ? <Item onSelect={onPark}>Park thread</Item> : null}
+          {onResume ? <Item onSelect={onResume}>Resume</Item> : null}
           {onSettle ? <Item onSelect={onSettle}>Settle</Item> : null}
           {onUnsettle ? <Item onSelect={onUnsettle}>Un-settle</Item> : null}
           {canSnooze && onSnooze && snoozePresets.length > 0 ? (
