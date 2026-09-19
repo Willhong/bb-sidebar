@@ -32,6 +32,12 @@ import {
   SIDEBAR_SETTINGS_CHANNEL,
   type SidebarSettingsValues,
 } from "./sidebar-settings";
+import {
+  ACTIVE_SORT_CHANNEL,
+  ACTIVE_SORT_MODES,
+  DEFAULT_ACTIVE_SORT_MODE,
+  type ActiveSortMode,
+} from "./active-sort";
 import { configuredSnoozePresetError } from "./lifecycle";
 import { portSnapshotSchema } from "./open-ports";
 import { createPortDiscovery } from "./port-discovery";
@@ -80,6 +86,8 @@ const migrations = [
   `ALTER TABLE sidebar_settings
      ADD COLUMN show_running_children_when_collapsed INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE thread_lifecycle ADD COLUMN parked_at INTEGER`,
+  `ALTER TABLE sidebar_settings
+     ADD COLUMN active_sort_mode TEXT NOT NULL DEFAULT 'manual'`,
 ];
 
 export interface StoredLifecycleRow {
@@ -98,6 +106,10 @@ interface LifecycleDbRow {
   settled_override: SettledOverride | null;
   snoozed_until: number | null;
   snoozed_at: number | null;
+}
+
+interface ActiveSortModeDbRow {
+  active_sort_mode: string;
 }
 
 interface SidebarSettingsDbRow {
@@ -161,6 +173,9 @@ const sidebarSettingsSchema = z
     autoSettleOnMerge: z.boolean(),
   })
   .strict();
+// The sidebar's `ActiveSortMode` restated at the wire boundary, because the
+// stored column is a string until this parses it.
+const activeSortModeSchema = z.enum(ACTIVE_SORT_MODES);
 const uploadFilenameSchema = z
   .string()
   .trim()
@@ -209,6 +224,14 @@ export const bbSidebarRpcContract = defineRpcContract({
   getSidebarSettings: {
     input: z.object({}).strict(),
     output: sidebarSettingsSchema,
+  },
+  getActiveSortMode: {
+    input: z.object({}).strict(),
+    output: z.object({ activeSortMode: activeSortModeSchema }).strict(),
+  },
+  setActiveSortMode: {
+    input: z.object({ activeSortMode: activeSortModeSchema }).strict(),
+    output: z.object({ activeSortMode: activeSortModeSchema }).strict(),
   },
   updateSidebarSettings: {
     input: sidebarSettingsSchema,
@@ -483,6 +506,37 @@ export default async function plugin(bb: BbPluginApi) {
       values.autoSettleInactive ? 1 : 0,
       values.autoSettleAfterDays,
       values.autoSettleOnMerge ? 1 : 0,
+    );
+  };
+
+  const readActiveSortMode = (): ActiveSortMode => {
+    const row = db
+      .prepare(`SELECT active_sort_mode FROM sidebar_settings WHERE id = 1`)
+      .get() as ActiveSortModeDbRow | undefined;
+    return activeSortModeSchema
+      .catch(DEFAULT_ACTIVE_SORT_MODE)
+      .parse(row?.active_sort_mode);
+  };
+  const writeActiveSortMode = (mode: ActiveSortMode): void => {
+    // The settings row carries the sort mode, and a sidebar whose settings were
+    // never saved has no row yet.
+    db.prepare(
+      `INSERT INTO sidebar_settings (
+         id, snooze_presets, inactive_threads_enabled,
+         inactive_after_hours, show_running_children_when_collapsed,
+         auto_settle_inactive, auto_settle_after_days, auto_settle_on_merge,
+         active_sort_mode
+       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET active_sort_mode = excluded.active_sort_mode`,
+    ).run(
+      DEFAULT_SIDEBAR_SETTINGS.snoozePresets,
+      DEFAULT_SIDEBAR_SETTINGS.inactiveThreadsEnabled ? 1 : 0,
+      DEFAULT_SIDEBAR_SETTINGS.inactiveAfterHours,
+      DEFAULT_SIDEBAR_SETTINGS.showRunningChildrenWhenCollapsed ? 1 : 0,
+      DEFAULT_SIDEBAR_SETTINGS.autoSettleInactive ? 1 : 0,
+      DEFAULT_SIDEBAR_SETTINGS.autoSettleAfterDays,
+      DEFAULT_SIDEBAR_SETTINGS.autoSettleOnMerge ? 1 : 0,
+      mode,
     );
   };
 
@@ -1144,6 +1198,14 @@ export default async function plugin(bb: BbPluginApi) {
         );
       });
       return readSidebarSettings();
+    },
+    async getActiveSortMode() {
+      return { activeSortMode: readActiveSortMode() };
+    },
+    async setActiveSortMode({ activeSortMode }) {
+      writeActiveSortMode(activeSortMode);
+      bb.realtime.publish(ACTIVE_SORT_CHANNEL, { activeSortMode });
+      return { activeSortMode: readActiveSortMode() };
     },
     async listLifecycle() {
       return { rows: readAll() };

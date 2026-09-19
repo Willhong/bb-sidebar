@@ -446,6 +446,66 @@ describe("lifecycle RPC", () => {
     ]);
   });
 
+  it("stores the active sort mode, publishes it, and keeps it across a reload", async () => {
+    const harness = await loadPlugin();
+
+    await expect(
+      harness.behavior.callRpc("getActiveSortMode", {}),
+    ).resolves.toEqual({ activeSortMode: "manual" });
+
+    await expect(
+      harness.behavior.callRpc("setActiveSortMode", {
+        activeSortMode: "activity",
+      }),
+    ).resolves.toEqual({ activeSortMode: "activity" });
+    expect(harness.inspection.realtimeSignals).toContainEqual({
+      channel: "active-sort",
+      payload: { activeSortMode: "activity" },
+    });
+
+    const reloaded = await harness.lifecycle.reload(plugin);
+    disposers.push(() => reloaded.harness.lifecycle.dispose());
+    await expect(
+      reloaded.harness.behavior.callRpc("getActiveSortMode", {}),
+    ).resolves.toEqual({ activeSortMode: "activity" });
+  });
+
+  it("rejects a sort mode the sidebar does not offer", async () => {
+    const harness = await loadPlugin();
+
+    await expect(
+      harness.behavior.callRpc("setActiveSortMode", {
+        activeSortMode: "alphabetical",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      harness.behavior.callRpc("getActiveSortMode", {}),
+    ).resolves.toEqual({ activeSortMode: "manual" });
+  });
+
+  it("keeps the sort mode and the settings page out of each other's way", async () => {
+    const harness = await loadPlugin();
+
+    await harness.behavior.callRpc("setActiveSortMode", {
+      activeSortMode: "created",
+    });
+    const settings = (await harness.behavior.callRpc(
+      "getSidebarSettings",
+      {},
+    )) as Record<string, unknown>;
+    expect(settings).not.toHaveProperty("activeSortMode");
+
+    // Saving the settings page writes the whole settings row; the sort mode a
+    // sidebar picked while that page was open must survive it.
+    await harness.behavior.callRpc("updateSidebarSettings", {
+      ...settings,
+      autoSettleAfterDays: 7,
+    });
+    await expect(
+      harness.behavior.callRpc("getActiveSortMode", {}),
+    ).resolves.toEqual({ activeSortMode: "created" });
+  });
+
   it("persists inbox order in the plugin database and publishes it", async () => {
     const harness = await loadPlugin();
 

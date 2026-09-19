@@ -4706,3 +4706,95 @@ describe("parent thread menu", () => {
     await waitFor(() => expect(toastMocks.error).toHaveBeenCalledWith("Could not update parent", { description: "Parent is no longer available" }));
   });
 });
+
+describe("active sort mode", () => {
+  function renderWithSort(
+    rpcOverrides: Record<string, (input: never) => unknown> = {},
+  ) {
+    return renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "older", title: "Older", createdAt: 1, updatedAt: 40 }),
+          thread({ id: "newer", title: "Newer", createdAt: 2, updatedAt: 10 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      providers: { status: "ready", providers: defaultProviders },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        ...rpcOverrides,
+      },
+    });
+  }
+
+  function sortMenu(label: string) {
+    return within(screen.getByRole("region", { name: "Active" })).getByRole(
+      "combobox",
+      { name: `Sort active threads: ${label}` },
+    );
+  }
+
+  async function pick(label: string, option: string) {
+    fireEvent.keyDown(sortMenu(label), { key: "Enter" });
+    fireEvent.click(screen.getByRole("option", { name: option }));
+  }
+
+  it("stores a picked sort mode on the server rather than in this browser", async () => {
+    const setActiveSortMode = vi.fn(() => ({ activeSortMode: "created" }));
+    renderWithSort({
+      getActiveSortMode: () => ({ activeSortMode: "manual" }),
+      setActiveSortMode,
+    });
+
+    await pick("Manual order", "Date created");
+
+    await waitFor(() =>
+      expect(setActiveSortMode).toHaveBeenCalledWith({
+        activeSortMode: "created",
+      }),
+    );
+    expect(sortMenu("Date created")).toBeDefined();
+  });
+
+  it("follows the sort mode another window chose", async () => {
+    let stored = "manual";
+    const rendered = renderWithSort({
+      getActiveSortMode: () => ({ activeSortMode: stored }),
+    });
+
+    await waitFor(() => expect(sortMenu("Manual order")).toBeDefined());
+    stored = "activity";
+    await rendered.emitRealtime("active-sort", { activeSortMode: stored });
+
+    await waitFor(() => expect(sortMenu("Recent activity")).toBeDefined());
+  });
+
+  it("hands this browser's stored choice up the first time the server has none", async () => {
+    localStorage.setItem("bb-sidebar:active-sort:v1", "created");
+    const setActiveSortMode = vi.fn(() => ({ activeSortMode: "created" }));
+    renderWithSort({
+      getActiveSortMode: () => ({ activeSortMode: "manual" }),
+      setActiveSortMode,
+    });
+
+    await waitFor(() =>
+      expect(setActiveSortMode).toHaveBeenCalledWith({
+        activeSortMode: "created",
+      }),
+    );
+    expect(sortMenu("Date created")).toBeDefined();
+  });
+
+  it("leaves a server choice alone when this browser stored an older one", async () => {
+    localStorage.setItem("bb-sidebar:active-sort:v1", "created");
+    const setActiveSortMode = vi.fn(() => ({ activeSortMode: "activity" }));
+    renderWithSort({
+      getActiveSortMode: () => ({ activeSortMode: "activity" }),
+      setActiveSortMode,
+    });
+
+    await waitFor(() => expect(sortMenu("Recent activity")).toBeDefined());
+    expect(setActiveSortMode).not.toHaveBeenCalled();
+  });
+});

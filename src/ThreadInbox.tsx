@@ -85,9 +85,18 @@ import {
   pruneChildExpansion,
   safeSetItem,
 } from "./lib/safe-storage";
+import {
+  ACTIVE_SORT_CHANNEL,
+  ACTIVE_SORT_LABELS,
+  ACTIVE_SORT_MODES,
+  activeSortModeToAdopt,
+  cacheActiveSortMode,
+  cachedActiveSortMode,
+  DEFAULT_ACTIVE_SORT_MODE,
+  isActiveSortMode,
+  type ActiveSortMode,
+} from "./active-sort";
 
-const ACTIVE_GROUPING_STORAGE_KEY = "bb-sidebar:active-grouping:v1";
-const ACTIVE_SORT_STORAGE_KEY = "bb-sidebar:active-sort:v1";
 const SHELF_EXPANSION_STORAGE_KEY = "bb-sidebar:shelf-expansion:v1";
 const CHILD_EXPANSION_STORAGE_KEY = "bb-sidebar:child-expansion:v1";
 const SETTLED_INITIAL_LIMIT = 10;
@@ -259,32 +268,6 @@ function readShelfExpansion(): ShelfExpansionState {
   }
 }
 
-const ACTIVE_SORT_MODES = ["manual", "activity", "created", "project"] as const;
-type ActiveSortMode = (typeof ACTIVE_SORT_MODES)[number];
-
-const ACTIVE_SORT_LABELS: Record<ActiveSortMode, string> = {
-  manual: "Manual order",
-  activity: "Recent activity",
-  created: "Date created",
-  project: "Project",
-};
-
-function isActiveSortMode(value: string): value is ActiveSortMode {
-  return ACTIVE_SORT_MODES.some((mode) => mode === value);
-}
-
-function readActiveSort(): ActiveSortMode {
-  try {
-    const stored = window.localStorage.getItem(ACTIVE_SORT_STORAGE_KEY);
-    if (stored && isActiveSortMode(stored)) return stored;
-    return window.localStorage.getItem(ACTIVE_GROUPING_STORAGE_KEY) === "true"
-      ? "project"
-      : "manual";
-  } catch {
-    return "manual";
-  }
-}
-
 type ActiveShelfKind = "pinned" | "inbox";
 
 interface ActiveThreadGroup {
@@ -450,8 +433,50 @@ export function ThreadInbox({
     useState<ShelfExpansionState>(readShelfExpansion);
   const [expandedChildParentIds, setExpandedChildParentIds] =
     useState<Set<string>>(readChildExpansion);
-  const [activeSortMode, setActiveSortMode] =
-    useState<ActiveSortMode>(readActiveSort);
+  // The sort mode lives on the server so every window and device agrees; the
+  // cached value only carries the first paint until the first read answers.
+  const [activeSortMode, setActiveSortModeState] = useState<ActiveSortMode>(
+    () => cachedActiveSortMode() ?? DEFAULT_ACTIVE_SORT_MODE,
+  );
+  const loadActiveSortMode = useCallback(async () => {
+    try {
+      const { activeSortMode: stored } = await rpc.call("getActiveSortMode", {});
+      const adopted = activeSortModeToAdopt({
+        server: stored,
+        cached: cachedActiveSortMode(),
+      });
+      if (adopted === null) {
+        setActiveSortModeState(stored);
+        return;
+      }
+      // This browser chose a mode before the server stored one. Hand it up
+      // rather than resetting the list on the first load after the upgrade.
+      setActiveSortModeState(adopted);
+      await rpc.call("setActiveSortMode", { activeSortMode: adopted });
+    } catch {
+      void 0; // Older test harnesses and a backend still reloading have no method yet.
+    }
+  }, [rpc]);
+  useEffect(() => {
+    void loadActiveSortMode();
+  }, [loadActiveSortMode]);
+  // Whatever the list is actually sorted by is what this browser paints first
+  // next time, including a mode carried over from the grouping toggle.
+  useEffect(() => {
+    cacheActiveSortMode(activeSortMode);
+  }, [activeSortMode]);
+  useRealtime(ACTIVE_SORT_CHANNEL, () => {
+    void loadActiveSortMode();
+  });
+  const setActiveSortMode = useCallback(
+    (mode: ActiveSortMode) => {
+      setActiveSortModeState(mode);
+      void rpc.call("setActiveSortMode", { activeSortMode: mode }).catch(() => {
+        void 0; // The list already moved; a failed write retries on the next change.
+      });
+    },
+    [rpc],
+  );
   const [settledLimit, setSettledLimit] = useState(SETTLED_INITIAL_LIMIT);
   useEffect(() => {
     const pruned = pruneChildExpansion([...expandedChildParentIds]);
@@ -463,9 +488,6 @@ export function ThreadInbox({
   useEffect(() => {
     safeSetItem(SHELF_EXPANSION_STORAGE_KEY, JSON.stringify(expandedShelves));
   }, [expandedShelves]);
-  useEffect(() => {
-    safeSetItem(ACTIVE_SORT_STORAGE_KEY, activeSortMode);
-  }, [activeSortMode]);
 
   const projectNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
