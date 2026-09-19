@@ -309,4 +309,88 @@ describe("SubagentsChip", () => {
     expect(screen.queryByRole("region", { name: "Child threads" })).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
+
+  it("pins the child menu inside a compact viewport instead of hanging it off the trigger", () => {
+    const rects = new Map<string, DOMRect>();
+    const originalGetBoundingClientRect =
+      HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      if (this.tagName === "BUTTON" && this.getAttribute("aria-expanded"))
+        return rects.get("trigger")!;
+      if (this.getAttribute("data-child-menu-placement"))
+        return rects.get("menu")!;
+      return originalGetBoundingClientRect.call(this);
+    };
+    // A 390pt phone: the chip sits at the right end of the header, and the
+    // menu is wider than the space to its left.
+    rects.set("trigger", { bottom: 56, right: 180 } as DOMRect);
+    rects.set("menu", { width: 320 } as DOMRect);
+    const visualViewport = {
+      offsetLeft: 0,
+      offsetTop: 0,
+      width: 390,
+      height: 700,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: visualViewport,
+    });
+
+    try {
+      renderSlot(
+        childrenChip,
+        { threadId: "parent", projectId: "proj_1", isCompactViewport: true },
+        {
+          sidebarThreads: {
+            status: "ready",
+            threads: [
+              thread({ id: "parent", title: "Parent" }),
+              thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+            ],
+            projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          },
+        },
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+      const menu = screen.getByRole("region", { name: "Child threads" });
+
+      expect(menu.getAttribute("data-child-menu-placement")).toBe("viewport");
+      // Right-aligning under the trigger would start at 180 - 320 = -140.
+      expect(menu.style.left).toBe("8px");
+      expect(menu.style.top).toBe("64px");
+      expect(menu.style.maxHeight).toBe("min(32rem, 628px)");
+      expect(menu.style.maxWidth).toBe("374px");
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect =
+        originalGetBoundingClientRect;
+      Reflect.deleteProperty(window, "visualViewport");
+    }
+  });
+
+  it("leaves the wide header menu anchored to the chip", () => {
+    renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+      },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+    const menu = screen.getByRole("region", { name: "Child threads" });
+
+    expect(menu.getAttribute("data-child-menu-placement")).toBe("trigger");
+    expect(menu.className).toContain("absolute");
+    expect(menu.style.left).toBe("");
+  });
 });
