@@ -8,6 +8,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import type { bbSidebarRpcContract } from "./server";
+import { ParentThreadMenu } from "./ParentThreadMenu";
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
 import { usePortalScopeProps } from "./lib/portal-scope";
@@ -112,6 +113,7 @@ export function RowContextMenu({
           <Item onSelect={() => actions.open(thread.id, { split: true })}>
             Open in split
           </Item>
+          <ParentThreadMenu thread={thread} />
           {projectItems ? (
             <ContextMenu.Sub onOpenChange={onOpenChange}>
               <ContextMenu.SubTrigger className="flex cursor-pointer items-center rounded-md px-2 py-1.5 text-sm outline-none data-[state=open]:bg-accent data-[highlighted]:bg-accent">

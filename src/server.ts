@@ -198,6 +198,10 @@ export const bbSidebarRpcContract = defineRpcContract({
       reasoningLevel: z.string(),
     }).strict().nullable(),
   },
+  setThreadParent: {
+    input: threadIdSchema.extend({ parentThreadId: z.string().trim().min(1).nullable() }).strict(),
+    output: z.object({ ok: z.boolean() }),
+  },
   regenerateTitle: {
     input: threadIdSchema.strict(),
     output: z.object({ title: z.string().min(1).max(100) }).strict(),
@@ -1121,6 +1125,11 @@ export default async function plugin(bb: BbPluginApi) {
       return options
         ? { model: options.model, reasoningLevel: options.reasoningLevel }
         : null;
+    },
+    async setThreadParent({ threadId, parentThreadId }) {
+      // BB validates parent relationships, including cycles and project scope.
+      await bb.sdk.threads.update({ threadId, parentThreadId });
+      return { ok: true };
     },
     regenerateTitle: ({ threadId }) => regenerateTitle(threadId),
     async getSidebarSettings() {

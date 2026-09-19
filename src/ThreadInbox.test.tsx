@@ -3360,6 +3360,7 @@ describe("row context menu", () => {
         .map((item) => item.textContent),
     ).toEqual([
       "Open in split",
+      "Parent",
       "Project",
       "Pin",
       "Park thread",
@@ -4467,4 +4468,61 @@ it("keeps parked threads parked when opened and offers Resume with Undo", async 
   expect(toast).toBeDefined();
   act(() => toast![1].action.onClick());
   await waitFor(() => expect(park).toHaveBeenCalled());
+});
+
+
+describe("parent thread menu", () => {
+  async function openParentMenu(setThreadParent = vi.fn(() => ({ ok: true }))) {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "child", title: "Choose my parent", parentThreadId: "old" }),
+          thread({ id: "old", title: "Current parent", isArchived: true }),
+          thread({ id: "next", title: "Next parent" }),
+          thread({ id: "descendant", title: "Forbidden child", parentThreadId: "child" }),
+          thread({ id: "grandchild", title: "Forbidden grandchild", parentThreadId: "descendant" }),
+          thread({ id: "other", title: "Other project", projectId: "proj_other" }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }), setThreadParent },
+    });
+    fireEvent.contextMenu(await screen.findByText("Choose my parent"));
+    const trigger = within(await screen.findByRole("menu", { name: "Thread actions" })).getByText("Parent");
+    fireEvent.keyDown(trigger, { key: "ArrowRight" });
+    const search = await screen.findByRole("textbox", { name: "Search parent threads" });
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    return { menu: search.closest('[role="menu"]') as HTMLElement, setThreadParent };
+  }
+
+  it("searches safe candidates and assigns a parent with the keyboard", async () => {
+    const { menu, setThreadParent } = await openParentMenu();
+    expect(within(menu).queryByText("Choose my parent")).toBeNull();
+    expect(within(menu).queryByText("Forbidden child")).toBeNull();
+    expect(within(menu).queryByText("Forbidden grandchild")).toBeNull();
+    expect(within(menu).queryByText("Other project")).toBeNull();
+    expect(within(menu).getByRole("menuitemradio", { name: "Current parent" }).getAttribute("aria-checked")).toBe("true");
+    const input = within(menu).getByRole("textbox", { name: "Search parent threads" });
+    fireEvent.change(input, { target: { value: "NEXT" } });
+    expect(within(menu).getByRole("menuitemradio", { name: "Next parent" })).toBeDefined();
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitemradio", { name: "Next parent" }));
+    fireEvent.keyDown(document.activeElement!, { key: "Enter" });
+    await waitFor(() => expect(setThreadParent).toHaveBeenCalledWith({ threadId: "child", parentThreadId: "next" }));
+  });
+
+  it("offers None even with no search matches and removes the parent", async () => {
+    const { menu, setThreadParent } = await openParentMenu();
+    fireEvent.change(within(menu).getByRole("textbox"), { target: { value: "no match" } });
+    expect(within(menu).getByText("No matching threads")).toBeDefined();
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: "None" }));
+    await waitFor(() => expect(setThreadParent).toHaveBeenCalledWith({ threadId: "child", parentThreadId: null }));
+  });
+
+  it("reports a rejected parent change", async () => {
+    const { menu } = await openParentMenu(vi.fn(() => { throw new Error("Parent is no longer available"); }));
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: "Next parent" }));
+    await waitFor(() => expect(toastMocks.error).toHaveBeenCalledWith("Could not update parent", { description: "Parent is no longer available" }));
+  });
 });
