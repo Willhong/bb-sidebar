@@ -644,6 +644,20 @@ export function ThreadInbox({
       ),
     [projectNameById, visibleInbox],
   );
+  // Settle follows Pinned, then Active, including rows hidden by collapse.
+  const settleCandidates = useMemo(
+    () => [
+      ...pinned,
+      ...(activeSortMode === "project"
+        ? groupActiveThreadsByProject([], inbox, projectNameById).flatMap(
+            (group) => group.entries.map((entry) => entry.thread),
+          )
+        : sortActiveThreads(inbox, activeSortMode)),
+    ],
+    [activeSortMode, inbox, pinned, projectNameById],
+  );
+  const settleCandidatesRef = useRef(settleCandidates);
+  settleCandidatesRef.current = settleCandidates;
 
   // A drag installs its listeners once, at pointer-down, but the shelf keeps
   // moving underneath it: the host pushes order changes mid-gesture. The order
@@ -1032,14 +1046,13 @@ export function ThreadInbox({
   const parkActiveThread = async (
     thread: PluginSidebarThread,
     mutation: () => Promise<boolean>,
+    nextThreadFor: () => PluginSidebarThread | null = () =>
+      nextThreadAfterParking([...pinned, ...inbox, ...inactive], thread.id),
   ) => {
     const parked = await mutation();
     if (!parked || activeThreadIdRef.current !== thread.id) return;
 
-    const nextThread = nextThreadAfterParking(
-      [...pinned, ...inbox, ...inactive],
-      thread.id,
-    );
+    const nextThread = nextThreadFor();
     if (nextThread) {
       actions.open(nextThread.id);
     } else {
@@ -1049,6 +1062,19 @@ export function ThreadInbox({
       });
     }
     onNavigate();
+  };
+
+  const settleThread = (thread: PluginSidebarThread) => {
+    void parkActiveThread(
+      thread,
+      () => lifecycle.settle(thread.id),
+      // Read the latest list after the request, since another client may
+      // have settled or reordered the first candidate while it was pending.
+      () =>
+        settleCandidatesRef.current.find(
+          (candidate) => candidate.id !== thread.id,
+        ) ?? null,
+    );
   };
 
   const renderActiveThread = (
@@ -1070,9 +1096,7 @@ export function ThreadInbox({
       onPark={() =>
         void parkActiveThread(thread, () => lifecycle.park(thread.id))
       }
-      onSettle={() =>
-        void parkActiveThread(thread, () => lifecycle.settle(thread.id))
-      }
+      onSettle={() => settleThread(thread)}
       onSnooze={(until) =>
         void parkActiveThread(thread, () => lifecycle.snooze(thread.id, until))
       }
@@ -1248,6 +1272,7 @@ export function ThreadInbox({
               ) : null}
               <CompactShelf
                 label="Snoozed"
+                onSettle={settleThread}
                 icon="Clock"
                 threads={snoozed}
                 projectNameById={projectNameById}
@@ -1268,6 +1293,7 @@ export function ThreadInbox({
               />
               <CompactShelf
                 label="Parked"
+                onSettle={settleThread}
                 icon="Car"
                 threads={parked}
                 projectNameById={projectNameById}
@@ -1288,6 +1314,7 @@ export function ThreadInbox({
               />
               <CompactShelf
                 label="Settled"
+                onSettle={settleThread}
                 icon="Meditation"
                 threads={settled}
                 projectNameById={projectNameById}
@@ -1385,6 +1412,7 @@ function CompactShelf({
   projectIconRevision,
   settledLimit,
   onLoadMore,
+  onSettle,
 }: {
   label: string;
   icon: IconName;
@@ -1401,6 +1429,7 @@ function CompactShelf({
   projectIconRevision: number;
   settledLimit?: number;
   onLoadMore?: () => void;
+  onSettle: (thread: PluginSidebarThread) => void;
 }) {
   const attachListAutoAnimateRef = useListAutoAnimate<HTMLUListElement>();
   if (threads.length === 0) return null;
@@ -1430,7 +1459,7 @@ function CompactShelf({
             shelf={shelf}
             parkedAt={lifecycle.parkedAtFor(thread)}
             onPark={() => void lifecycle.park(thread.id)}
-            onSettle={() => void lifecycle.settle(thread.id)}
+            onSettle={() => onSettle(thread)}
             wakeAt={lifecycle.wakeAtFor(thread)}
             now={now}
             snoozePresets={snoozePresets}

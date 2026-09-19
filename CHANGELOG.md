@@ -12,6 +12,10 @@
 
 - Move Parked directly below Snoozed, before Settled.
 
+### Fixed
+
+- After settling the open thread, select the first Pinned thread, then the first Active thread in its current sort order, or open the new-thread page when both sections are empty.
+
 ## [0.2.16] - 2026-09-18
 
 ### Added
