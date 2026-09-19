@@ -12,7 +12,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 
 - Manual ordering plus Recent activity, Date created, and Project sort modes
 - Subtle project grouping for projects with multiple active threads
-- Pinned, Active, Inactive, Parked, Snoozed, and Settled shelves
+- Pinned, Active, Inactive, Snoozed, Parked, and Settled shelves
 - Project filtering
 - Automatic project icons with custom overrides
 - Expandable child-thread indicators with running and attention states

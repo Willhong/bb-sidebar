@@ -20,7 +20,7 @@ import {
   type AnimationController,
 } from "@formkit/auto-animate";
 import { toast } from "sonner";
-import { Icon } from "./components/Icon";
+import { Icon, type IconName } from "./components/Icon";
 import { cn } from "./lib/utils";
 import {
   Select,
@@ -1149,6 +1149,7 @@ export function ThreadInbox({
               {pinned.length > 0 ? (
                 <CollapsibleShelf
                   label="Pinned"
+                  icon="Pin"
                   count={pinned.length}
                   expanded={expandedShelves.pinned}
                   onToggle={() =>
@@ -1168,6 +1169,7 @@ export function ThreadInbox({
               {inbox.length > 0 ? (
                 <CollapsibleShelf
                   label="Active"
+                  icon="Pulse"
                   count={inbox.length}
                   expanded={expandedShelves.active}
                   onToggle={() =>
@@ -1222,6 +1224,7 @@ export function ThreadInbox({
               {inactive.length > 0 ? (
                 <CollapsibleShelf
                   label="Inactive"
+                  icon="PauseCircle"
                   count={inactive.length}
                   expanded={expandedShelves.inactive}
                   onToggle={() =>
@@ -1244,26 +1247,8 @@ export function ThreadInbox({
                 <ActiveEmptyState />
               ) : null}
               <CompactShelf
-                label="Parked"
-                threads={parked}
-                projectNameById={projectNameById}
-                expanded={expandedShelves.parked}
-                onToggle={() =>
-                  setExpandedShelves((current) => ({
-                    ...current,
-                    parked: !current.parked,
-                  }))
-                }
-                shelf="parked"
-                visibleThreads={visibleParked}
-                activeThreadId={activeThreadId}
-                lifecycle={lifecycle}
-                snoozePresets={snoozePresets}
-                onNavigate={onNavigate}
-                projectIconRevision={projectIconRevision}
-              />
-              <CompactShelf
                 label="Snoozed"
+                icon="Clock"
                 threads={snoozed}
                 projectNameById={projectNameById}
                 expanded={expandedShelves.snoozed}
@@ -1282,7 +1267,28 @@ export function ThreadInbox({
                 projectIconRevision={projectIconRevision}
               />
               <CompactShelf
+                label="Parked"
+                icon="Car"
+                threads={parked}
+                projectNameById={projectNameById}
+                expanded={expandedShelves.parked}
+                onToggle={() =>
+                  setExpandedShelves((current) => ({
+                    ...current,
+                    parked: !current.parked,
+                  }))
+                }
+                shelf="parked"
+                visibleThreads={visibleParked}
+                activeThreadId={activeThreadId}
+                lifecycle={lifecycle}
+                snoozePresets={snoozePresets}
+                onNavigate={onNavigate}
+                projectIconRevision={projectIconRevision}
+              />
+              <CompactShelf
                 label="Settled"
+                icon="Meditation"
                 threads={settled}
                 projectNameById={projectNameById}
                 expanded={expandedShelves.settled}
@@ -1365,6 +1371,7 @@ function ActiveEmptyState() {
  */
 function CompactShelf({
   label,
+  icon,
   threads,
   projectNameById,
   expanded,
@@ -1380,6 +1387,7 @@ function CompactShelf({
   onLoadMore,
 }: {
   label: string;
+  icon: IconName;
   threads: readonly PluginSidebarThread[];
   projectNameById?: ReadonlyMap<string, string>;
   expanded: boolean;
@@ -1403,6 +1411,7 @@ function CompactShelf({
   return (
     <CollapsibleShelf
       label={label}
+      icon={icon}
       count={threads.length}
       expanded={expanded}
       onToggle={onToggle}
@@ -1452,6 +1461,7 @@ function CompactShelf({
 
 function CollapsibleShelf({
   label,
+  icon,
   count,
   expanded,
   onToggle,
@@ -1459,6 +1469,7 @@ function CollapsibleShelf({
   children,
 }: {
   label: string;
+  icon: IconName;
   count: number;
   expanded: boolean;
   onToggle: () => void;
@@ -1476,7 +1487,8 @@ function CollapsibleShelf({
           // every row's status and provider glyph.
           className="mt-3 flex w-full items-center gap-2 px-2.5 pb-1 text-left"
         >
-          <span className="text-2xs font-medium text-muted-foreground/70">
+          <span className="flex shrink-0 items-center gap-1.5 text-2xs font-medium text-muted-foreground/70">
+            <Icon name={icon} className="size-3.5 shrink-0" aria-hidden />
             {expanded ? label : `${label} (${count})`}
           </span>
           <span className="h-px flex-1 bg-sidebar-border" />
