@@ -50,3 +50,37 @@ it("cancels dismissal when the pointer re-enters the row", async () => {
   await act(async () => { await vi.advanceTimersByTimeAsync(400); });
   expect(screen.getByRole("dialog")).toBeDefined();
 });
+
+function ExpandableCard({ name }: { name: string }) {
+  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  return <ThreadHoverCard open={open} onOpenChange={setOpen} content={<>
+    <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>Subthreads for {name}</button>
+    {expanded ? <span>Child of {name}</span> : null}
+  </>}><a href={`#${name}`}>{name}</a></ThreadHoverCard>;
+}
+
+it.each([false, true])("replaces a focused expanded card without restoring old focus, keyboard=%s", async (keyboard) => {
+  vi.useFakeTimers();
+  render(<><ExpandableCard name="First" /><ExpandableCard name="Second" /></>);
+  const first = screen.getByRole("link", { name: "First" });
+  if (keyboard) {
+    act(() => first.focus());
+    fireEvent.keyDown(first, { key: "Tab" });
+  } else {
+    fireEvent.pointerMove(first);
+    await act(async () => { await vi.advanceTimersByTimeAsync(260); });
+  }
+  const toggle = screen.getByRole("button", { name: "Subthreads for First" });
+  act(() => toggle.focus());
+  fireEvent.click(toggle);
+  expect(screen.getByText("Child of First")).toBeDefined();
+  const second = screen.getByRole("link", { name: "Second" });
+  fireEvent.pointerLeave(first);
+  fireEvent.pointerMove(second);
+  await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "Subthreads for First" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Subthreads for Second" })).toBeDefined();
+  expect(document.activeElement).not.toBe(first);
+});

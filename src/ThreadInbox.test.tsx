@@ -139,6 +139,45 @@ const listProps = {
   Original: () => null,
 };
 
+it("shows direct subthreads in the hover card and opens them by keyboard or click", async () => {
+  const rendered = render([
+    thread({ id: "parent", title: "Parent work" }),
+    thread({ id: "b", parentThreadId: "parent", title: "Review", createdAt: 20, providerId: "claude-code", hasPendingInteraction: true }),
+    thread({ id: "a", parentThreadId: "parent", title: null, titleFallback: "Implementation", createdAt: 10, indicator: "runtime", indicatorLabel: "Working" }),
+    thread({ id: "archived", parentThreadId: "parent", title: "Archived work", isArchived: true }),
+    thread({ id: "grandchild", parentThreadId: "a", title: "Nested work" }),
+  ]);
+  const row = screen.getByRole("link", { name: "Parent work" });
+  act(() => row.focus());
+  const details = await screen.findByRole("dialog", { name: "Thread details" });
+  const toggle = within(details).getByRole("button", { name: "Subthreads (2)", expanded: false });
+  expect(within(details).queryByRole("list", { name: "Subthreads" })).toBeNull();
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  const list = within(details).getByRole("list", { name: "Subthreads" });
+  const items = within(list).getAllByRole("button");
+  expect(items.map((item) => item.getAttribute("aria-label"))).toEqual([
+    "Open subthread: Implementation", "Open subthread: Review",
+  ]);
+  expect(list.textContent).toContain("Codex · Working");
+  expect(list.textContent).toContain("Claude Code · Needs you");
+  expect(within(details).queryByText("Archived work")).toBeNull();
+  expect(within(details).queryByText("Nested work")).toBeNull();
+  fireEvent.keyDown(row, { key: "Tab" });
+  expect(document.activeElement).toBe(toggle);
+  fireEvent.click(toggle);
+  expect(within(details).queryByRole("list", { name: "Subthreads" })).toBeNull();
+  fireEvent.click(toggle);
+  fireEvent.keyDown(toggle, { key: "Tab", shiftKey: true });
+  await waitFor(() => expect(document.activeElement).toBe(row));
+  fireEvent.pointerMove(row, { pointerType: "mouse" });
+  const reopened = await screen.findByRole("dialog", { name: "Thread details" });
+  fireEvent.click(within(reopened).getByRole("button", { name: "Subthreads (2)", expanded: false }));
+  fireEvent.click(within(reopened).getByRole("button", { name: "Open subthread: Review" }));
+  expect(rendered.sidebarActionCalls).toContainEqual({ method: "open", threadId: "b" });
+  expect(screen.queryByRole("dialog", { name: "Thread details" })).toBeNull();
+});
+
 it("shows port details in the thread hover card", async () => {
   localStorage.setItem("bb-sidebar:port-link-host:v1", "host_local");
   const openUrl = vi.fn(() => true);
@@ -4170,6 +4209,7 @@ describe("card metadata", () => {
     expect(details.textContent).toContain("Machine: Build Mac");
     expect(details.textContent).toContain("Provider: Claude Code");
     expect(details.textContent).toContain("Model:");
+    expect(within(details).queryByRole("list", { name: "Subthreads" })).toBeNull();
   });
 
   // Not exactly 3h: the card's clock is quantized to the minute, so a

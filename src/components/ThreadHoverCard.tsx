@@ -2,6 +2,8 @@ import { useCallback, useEffect, useId, useRef, type ReactElement, type ReactNod
 import * as Popover from "@radix-ui/react-popover";
 import { usePortalScopeProps } from "../lib/portal-scope";
 
+const HOVER_CARD_OPENED = "bb-sidebar:thread-hover-card-opened";
+
 /** Hover preview with a keyboard path into its links. Blank areas pass clicks through. */
 export function ThreadHoverCard({ children, content, open, onOpenChange }: {
   children: ReactElement;
@@ -32,6 +34,19 @@ export function ThreadHoverCard({ children, content, open, onOpenChange }: {
     document.removeEventListener("pointerup", releasePointer);
     document.removeEventListener("pointercancel", releasePointer);
   }, [releasePointer]);
+  useEffect(() => {
+    if (!open) return;
+    // A focused disclosure can keep its card open after pointer leave. A new
+    // preview takes precedence, including over a card entered with Tab.
+    document.dispatchEvent(new Event(HOVER_CARD_OPENED));
+    const closeForAnotherCard = () => {
+      clearTimer();
+      restoreFocus.current = false;
+      onOpenChange(false);
+    };
+    document.addEventListener(HOVER_CARD_OPENED, closeForAnotherCard);
+    return () => document.removeEventListener(HOVER_CARD_OPENED, closeForAnotherCard);
+  }, [open, onOpenChange]);
   useEffect(() => {
     if (!open) return;
     const trackPointer = (event: PointerEvent) => {
@@ -78,7 +93,7 @@ export function ThreadHoverCard({ children, content, open, onOpenChange }: {
         }}
         onKeyDown={(event) => {
           if (event.key === "Tab" && !event.shiftKey && open) {
-            const first = panel.current?.querySelector<HTMLElement>("a[href], [data-port-scroll]");
+            const first = panel.current?.querySelector<HTMLElement>("a[href], button:not([disabled]), [data-port-scroll]");
             if (first) {
               event.preventDefault();
               restoreFocus.current = true;
@@ -107,7 +122,7 @@ export function ThreadHoverCard({ children, content, open, onOpenChange }: {
           onPointerLeave={scheduleClose}
           onFocusCapture={clearTimer}
           onKeyDown={(event) => {
-            const first = panel.current?.querySelector("a[href], [data-port-scroll]");
+            const first = panel.current?.querySelector("a[href], button:not([disabled]), [data-port-scroll]");
             if (event.key === "Tab" && event.shiftKey && event.target === first) {
               event.preventDefault();
               restoreFocus.current = true;
