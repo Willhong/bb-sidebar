@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## [0.2.17] - 2026-09-18
+
+### Added
+
+- Add small rounded icons to Pinned, Active, Inactive, Snoozed, Parked, and Settled section headers.
+
+### Improved
+
+- Move Parked directly below Snoozed, before Settled.
+
 ## [0.2.16] - 2026-09-18
 
 ### Added
@@ -256,3 +266,4 @@ Thanks to [@elianiva](https://github.com/elianiva) for identifying the storage i
 [0.1.0]: https://github.com/yusuf8834/bb-sidebar/releases/tag/v0.1.0
 
 [0.2.16]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.15...v0.2.16
+[0.2.17]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.16...v0.2.17
