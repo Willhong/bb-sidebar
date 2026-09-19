@@ -2,9 +2,22 @@
 
 ## Unreleased
 
-- Add a searchable Parent submenu to thread context menus for assigning or removing a parent.
+## [0.2.16] - 2026-09-18
 
-- Add a Parked section for threads waiting on others, with Park, Resume, Undo, waiting age, and protection from automatic cleanup.
+### Added
+
+- Add a Parked section for threads waiting on others, with Resume, Undo, waiting age, and protection from automatic cleanup.
+- Add a searchable Parent submenu for assigning or removing a thread's parent.
+- Add expandable subthreads to thread hover cards.
+- Offer to close thread-owned ports when settling a thread.
+
+### Improved
+
+- Improve drag-and-drop thread reordering and keyboard accessibility.
+
+### Fixed
+
+- Preserve inbox order across remounts and respect disabled inactivity settings.
 
 ## [0.2.15] - 2026-09-16
 
@@ -241,3 +254,5 @@ Thanks to [@elianiva](https://github.com/elianiva) for identifying the storage i
 [0.1.2]: https://github.com/yusuf8834/bb-sidebar/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/yusuf8834/bb-sidebar/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/yusuf8834/bb-sidebar/releases/tag/v0.1.0
+
+[0.2.16]: https://github.com/yusuf8834/bb-sidebar/compare/v0.2.15...v0.2.16
