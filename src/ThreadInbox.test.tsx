@@ -2968,6 +2968,32 @@ describe("parking threads", () => {
     expect(screen.getByRole("option", { name: "1 week" })).toBeDefined();
   });
 
+  it("keeps the completed status beside park actions on touch layouts", async () => {
+    render([
+      thread({
+        id: "thr_done",
+        indicator: "unread-success",
+        indicatorLabel: "Thread finished",
+      }),
+    ]);
+
+    const status = await screen.findByText("Unread");
+    const statusContent = status.parentElement;
+    expect(statusContent).not.toBeNull();
+    expect(
+      statusContent!.classList.contains("[@media(hover:none)]:opacity-0"),
+    ).toBe(false);
+    expect(
+      statusContent!.classList.contains("[@media(hover:none)]:static"),
+    ).toBe(true);
+
+    const controls = screen.getByLabelText("Settle thread").parentElement;
+    expect(controls).not.toBeNull();
+    expect(
+      controls!.classList.contains("[@media(hover:none)]:static"),
+    ).toBe(true);
+  });
+
   it("keeps hover-only snooze controls visible while the menu is open", async () => {
     render([thread({ id: "thr_snooze_anchor", title: "Quiet" })]);
 
