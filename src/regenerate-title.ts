@@ -95,6 +95,47 @@ export function parseTitle(output: string | null) {
   return title;
 }
 
+const DEFAULT_TITLE_MODELS: Readonly<Record<string, string>> = {
+  "claude-code": "claude-haiku-4-5",
+  codex: "gpt-5.6-luna",
+};
+
+type AiServicesView = {
+  selections?: Record<string, { mode: string; pluginId?: string }>;
+};
+
+type LegacyAiConfig = {
+  aiServices?: { inference?: string; inferenceFallback?: string };
+};
+
+/**
+ * bb 0.44 removed `config.aiServices`; titles now follow the per-task AI
+ * service selection. Older bb still reports the configured models.
+ */
+export async function titleModels(bb: BbPluginApi, config: unknown) {
+  const legacy = (config as LegacyAiConfig | null)?.aiServices;
+  const configured = [legacy?.inference, legacy?.inferenceFallback].filter(
+    (value): value is string => typeof value === "string" && value.includes("/"),
+  );
+  if (configured.length > 0) return [...new Set(configured)];
+  const order = Object.keys(DEFAULT_TITLE_MODELS);
+  const system = bb.sdk.system as unknown as {
+    aiServices?: () => Promise<AiServicesView>;
+  };
+  try {
+    const view = system.aiServices ? await system.aiServices() : null;
+    const selection = view?.selections?.["thread-title"];
+    if (selection?.mode === "service" && selection.pluginId) {
+      const providerId = selection.pluginId.replace(/^provider-/u, "");
+      if (providerId in DEFAULT_TITLE_MODELS)
+        order.sort((a, b) => Number(b === providerId) - Number(a === providerId));
+    }
+  } catch {
+    bb.log.warn("Could not read the AI service selection; using the default title models");
+  }
+  return order.map((providerId) => `${providerId}/${DEFAULT_TITLE_MODELS[providerId]}`);
+}
+
 /** Until bb exposes helper inference, use its public hidden-thread workflow. */
 export function createTitleRegenerator(bb: BbPluginApi) {
   const pending = new Map<string, Promise<{ title: string }>>();
@@ -131,12 +172,7 @@ export function createTitleRegenerator(bb: BbPluginApi) {
     const personalProject = (await bb.sdk.projects.list({ includePersonal: true }))
       .find((project) => project.kind === "personal");
     if (!personalProject) throw new Error("No personal project is available for title generation");
-    const models = [
-      ...new Set([
-        config.aiServices.inference,
-        config.aiServices.inferenceFallback,
-      ]),
-    ];
+    const models = await titleModels(bb, config);
     let title: string | undefined;
     for (const configured of models) {
       controller.signal.throwIfAborted();
@@ -150,6 +186,7 @@ export function createTitleRegenerator(bb: BbPluginApi) {
           (provider) => provider.id === providerId && provider.available,
         )
       ) {
+        if (configured !== models.at(-1)) continue;
         throw new Error(
           `Title regeneration needs an installed agent provider for ${configured}`,
         );

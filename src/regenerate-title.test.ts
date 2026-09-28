@@ -79,6 +79,44 @@ async function setup() {
 }
 
 describe("title regeneration", () => {
+  it("uses the thread-title AI service on bb without legacy inference config", async () => {
+    const { sdk, run } = await setup();
+    sdk.stub("system.config", async () => ({}));
+    sdk.stub("system.aiServices", async () => ({
+      selections: {
+        "thread-title": {
+          mode: "service",
+          pluginId: "provider-claude-code",
+          serviceId: "claude-code",
+        },
+      },
+      services: [],
+    }));
+    sdk.stub("providers.list", async () => [
+      { id: "codex", available: true },
+      { id: "claude-code", available: true },
+    ]);
+    await expect(run()).resolves.toEqual({ title: "Regenerate sidebar titles" });
+    expect(sdk.callsTo("threads.spawn")[0]![0]).toMatchObject({
+      providerId: "claude-code",
+      model: "claude-haiku-4-5",
+    });
+  });
+
+  it("skips an unavailable default provider", async () => {
+    const { sdk, run } = await setup();
+    sdk.stub("system.config", async () => ({}));
+    sdk.stub("system.aiServices", async () => ({
+      selections: { "thread-title": { mode: "automatic" } },
+      services: [],
+    }));
+    await expect(run()).resolves.toEqual({ title: "Regenerate sidebar titles" });
+    expect(sdk.callsTo("threads.spawn")[0]![0]).toMatchObject({
+      providerId: "codex",
+      model: "gpt-5.6-luna",
+    });
+  });
+
   it("sends only the last three user texts in order and saves the title", async () => {
     const { sdk, run } = await setup();
     await expect(run()).resolves.toEqual({
