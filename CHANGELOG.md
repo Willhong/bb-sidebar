@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## [0.2.18] - 2026-09-30
+
+### Added
+
+- Trigger Pokémon catches after manual and automatic settle when Willhong's Pokémon fork is installed. Catch delivery runs in the background and shares archive's one-catch-per-thread rule.
+
 ## [0.2.17] - 2026-09-18
 
 ### Added

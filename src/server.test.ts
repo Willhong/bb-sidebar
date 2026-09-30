@@ -255,6 +255,9 @@ describe("lifecycle RPC", () => {
     expect(harness.inspection.sdk.callsTo("threads.unpin")).toEqual([
       [{ threadId: "thr_1" }],
     ]);
+    expect(harness.inspection.sdk.callsTo("plugins.callRpc")).toEqual([
+      [expect.objectContaining({ pluginId: "pokemon", method: "catchSettledThread", input: { threadId: "thr_1" } })],
+    ]);
     const settled = (await harness.behavior.callRpc(
       "listLifecycle",
       {},
@@ -279,6 +282,7 @@ describe("lifecycle RPC", () => {
         }),
       ],
     });
+    expect(harness.inspection.sdk.callsTo("plugins.callRpc")).toHaveLength(1);
   });
 
   it("releases the agent session and only the terminals nobody used", async () => {
@@ -593,6 +597,19 @@ describe("lifecycle RPC", () => {
     await expect(
       harness.behavior.callRpc("listLifecycle", {}),
     ).resolves.toEqual({ rows: [] });
+    expect(harness.inspection.sdk.callsTo("plugins.callRpc")).toEqual([]);
+  });
+
+  it("saves settle before notifying Pokémon and tolerates a missing plugin", async () => {
+    const harness = await loadPlugin();
+    let persisted = false;
+    harness.inspection.sdk.stub("plugins.callRpc", async () => {
+      const lifecycle = await harness.behavior.callRpc("listLifecycle", {}) as LifecycleListResult;
+      persisted = lifecycle.rows.some((row) => row.threadId === "thr_1" && row.settledAt !== null);
+      throw new Error("Pokémon is not installed");
+    });
+    await expect(harness.behavior.callRpc("settle", { threadId: "thr_1" })).resolves.toMatchObject({ ok: true });
+    await expect.poll(() => persisted).toBe(true);
   });
 });
 
@@ -982,6 +999,11 @@ describe("automatic settle evaluation", () => {
       channel: "lifecycle",
       payload: { threadIds: ["thr_old"] },
     });
+    expect(harness.inspection.sdk.callsTo("plugins.callRpc")).toEqual([
+      [expect.objectContaining({
+        pluginId: "pokemon", method: "catchSettledThread", input: { threadId: "thr_old" },
+      })],
+    ]);
   });
 
   it("keeps manual un-settle active until real work clears the override", async () => {

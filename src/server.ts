@@ -43,6 +43,7 @@ import { portSnapshotSchema } from "./open-ports";
 import { createPortDiscovery } from "./port-discovery";
 import { createThreadPortActions } from "./thread-ports";
 import { ownedPortTargetSchema, closePortsResultSchema } from "./close-owned-ports";
+import { createPokemonCatchNotifier } from "./pokemon-catch";
 
 const migrations = [
   `CREATE TABLE IF NOT EXISTS thread_lifecycle (
@@ -451,6 +452,7 @@ function iconMimeType(path: string, reported: string): string {
 }
 
 export default async function plugin(bb: BbPluginApi) {
+  const notifyPokemonCatch = createPokemonCatchNotifier(bb);
   const getOpenPorts = createPortDiscovery(bb);
   const threadPortActions = createThreadPortActions(bb);
   const regenerateTitle = createTitleRegenerator(bb);
@@ -1127,6 +1129,9 @@ export default async function plugin(bb: BbPluginApi) {
       });
       if (changes.length === 0) return [];
       applyPolicyChanges(changes, now);
+      for (const change of changes) {
+        if (change.decision === "settle") notifyPokemonCatch(change.threadId);
+      }
       const changedThreadIds = changes.map((change) => change.threadId);
       bb.realtime.publish(LIFECYCLE_CHANNEL, { threadIds: changedThreadIds });
       // Outside the transaction, because releasing a runtime is a network call
@@ -1246,6 +1251,7 @@ export default async function plugin(bb: BbPluginApi) {
         snoozedUntil: null,
         snoozedAt: null,
       });
+      notifyPokemonCatch(threadId);
       // The shelf move is durable before anything is released, so a slow or
       // unreachable host delays the reminder without holding up the settle.
       return { ok: true, reclaim: await reclaimThreadResources(threadId) };
