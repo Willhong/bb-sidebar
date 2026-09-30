@@ -999,11 +999,7 @@ describe("automatic settle evaluation", () => {
       channel: "lifecycle",
       payload: { threadIds: ["thr_old"] },
     });
-    expect(harness.inspection.sdk.callsTo("plugins.callRpc")).toEqual([
-      [expect.objectContaining({
-        pluginId: "pokemon", method: "catchSettledThread", input: { threadId: "thr_old" },
-      })],
-    ]);
+    expect(harness.inspection.sdk.callsTo("plugins.callRpc")).toEqual([]);
   });
 
   it("keeps manual un-settle active until real work clears the override", async () => {

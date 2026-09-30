@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## [0.2.19] - 2026-09-30
+
+### Fixed
+
+- Award Pokémon catches only for manual settle. Automatic settle never triggers a catch; archive catches remain supported.
+
 ## [0.2.18] - 2026-09-30
 
 ### Added

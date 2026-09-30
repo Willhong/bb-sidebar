@@ -58,4 +58,4 @@ Use **Parent** in a thread's context menu to search threads in the same project,
 
 ## Pokémon catches
 
-With [Willhong’s Pokémon fork](https://github.com/Willhong/sawyer-plugins/tree/main/plugins/pokemon) installed, manual and automatic settle notify `pokemon.catchSettledThread` after saving the shelf change. The Pokémon plugin verifies the settled state and awards each visible top-level thread at most one catch across settle and archive. Catch delivery runs in the background and failures never block settling.
+With [Willhong’s Pokémon fork](https://github.com/Willhong/sawyer-plugins/tree/main/plugins/pokemon) installed, manual settle notifies `pokemon.catchSettledThread` after saving the shelf change. The Pokémon plugin verifies the settled state and awards each visible top-level thread at most one catch across settle and archive. Catch delivery runs in the background and failures never block settling.

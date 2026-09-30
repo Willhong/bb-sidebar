@@ -1129,9 +1129,6 @@ export default async function plugin(bb: BbPluginApi) {
       });
       if (changes.length === 0) return [];
       applyPolicyChanges(changes, now);
-      for (const change of changes) {
-        if (change.decision === "settle") notifyPokemonCatch(change.threadId);
-      }
       const changedThreadIds = changes.map((change) => change.threadId);
       bb.realtime.publish(LIFECYCLE_CHANNEL, { threadIds: changedThreadIds });
       // Outside the transaction, because releasing a runtime is a network call
